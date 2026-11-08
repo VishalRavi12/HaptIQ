@@ -10,6 +10,8 @@ Owner: Member B. Folders: `src/ghostgrip/simulation/`, `src/ghostgrip/ui/`, `tes
 .venv\Scripts\python.exe src\ghostgrip\ui\app.py --camera            # live hand (Member A)
 .venv\Scripts\python.exe src\ghostgrip\ui\app.py --camera --hardware COM4 --condition C
 .venv\Scripts\python.exe src\ghostgrip\ui\app.py --replay clean --hardware mock --condition D
+.venv\Scripts\python.exe src\ghostgrip\ui\app.py --camera --evaluation --session-id final_eval
+.venv\Scripts\python.exe src\ghostgrip\ui\app.py --view 2d           # flat view (Tab switches)
 .venv\Scripts\python.exe src\ghostgrip\ui\app.py --scene sandbox     # all three objects
 .venv\Scripts\python.exe src\ghostgrip\ui\app.py --replay data\local\trace_XXXX.csv
 .venv\Scripts\python.exe -m pytest tests/simulation -v               # Member B tests (CI uses pytest)
@@ -25,6 +27,20 @@ quitting sends STOP. While `config.yaml` has `servo_enabled: false`, CONTACT is 
 `SessionLogger` in `data/local/sessions/<session-id>/` (origin `real` for the camera,
 `synthetic` for mouse and shared traces). Calibrate once first: `python vision_preview.py --calibrate`.
 
+Phase 2 safety and lifecycle (checklist B1-B6, tests in `tests/simulation/test_app_lifecycle.py`):
+- Esc or closing the window ends the loop at once: no further camera read, physics step or cue.
+- Scene (1/2/3/0), condition (F1-F4) and trial resets (N, Enter, R) send STOP; press H again.
+- Camera frames keep their own capture time (re-based to the app start), not the loop time.
+- `--evaluation` freezes Member D's assist profile for the whole run and refuses `--assist-gain`
+  and the `[` `]` keys. Each run writes `run_<n>_meta.json` next to the CSV tables (input,
+  hardware mode, servo, evaluation, frozen profile, code version).
+- Any exit, including a crash or a failed start, sends STOP, closes the serial port, releases the
+  camera and closes the log. A finished replay disarms. `hardware.enabled: false` opens no port.
+
+View: `--view 3d` (default) is a pygame-only perspective renderer (`ui/renderer_3d.py`) of the
+same `WorldSnapshot`; `--view 2d` or **Tab** gives the flat view. Depth and smoothing are visual
+only; physics, events and logs are identical in both.
+
 Shared trace names for `--replay`: `clean`, `noisy`, `dropout_short`, `dropout_long`,
 `glitch`, `fast_reach`, `slow_close`, `low_quality`, `frame_drops`, `q_jitter`.
 `--replay` also plays Member A's real hand recordings (`python vision_preview.py --record`
@@ -36,7 +52,7 @@ with `--no-log`). Trial ids keep counting across runs of the same session.
 Controls: mouse moves the hand; hold left button or W to close, right button or S to open;
 wheel sets a grip that stays; Space opens; 1/2/3/0 glass/sponge/block/sandbox; F1-F4 condition
 A-D; `[` / `]` assist gain -/+ 0.1; N next trial; T lose tracking; L low quality; J jitter;
-G ghost marker; F9 record a trace; Esc quit.
+G ghost marker; F9 record a trace; Tab 3D/2D view; V camera preview; H arm board; X STOP; Esc quit.
 
 ## Phase 1 status (Phase 1 plan section 4)
 
@@ -124,7 +140,23 @@ world.event_reason(event.event_id)           # e.g. "overgrip", "dropped", "trac
 
 | Object | contact q | holds at q | breaks at q |
 |---|---|---|---|
-| glass | 0.30 | 0.40 | > 0.60, or dropped from > ~150 px |
+| glass | 0.30 | 0.40 | > 0.82 for 0.2 s (was 0.60 before Phase 2), or dropped from > ~150 px |
+
+A grab needs a deliberate closing, either of:
+- the hand was open (`q < REARM_Q = 0.25`) since the last engagement;
+- it closes by `CLOSE_GESTURE_Q = 0.12` within `CLOSE_WINDOW_MS = 500` while over the object.
+
+In a logged live session the hand roamed half-closed (median q 0.61). Under the old "open below 0.15 first" rule, about 580 frames with the pinch over an object were refused. A pinch held shut while sliding onto an object still never grabs, and a 0.07 wobble (`q_jitter`) never grabs. `OPEN_Q = 0.15` is unchanged (Member D's intent machine uses it).
+
+Camera input:
+- **Workspace.** It is mapped through `--camera-workspace` (default `0.15,0.70,0.10,0.70`), so the table and the target are reached with the whole hand still in view.
+- **Guard.** `ui/integration.py: CameraStabilizer` then holds the last good pointer and closure through:
+  - low-quality frames;
+  - frames with the fingers toward the camera (palm collapsed on screen) or the hand sideways;
+  - one-frame position jumps or grip spikes.
+
+  Held frames are reported as unreliable, so they cannot grab, cue or release. Garbage for more than 600 ms becomes tracking lost (safe release).
+- **Result.** Replaying the logged session: grabs 4 → 16, and the mid-air sponge drop caused by a bad frame is gone. The remaining drops are deliberate openings, or the heavy block slipping below its 0.85 hold.
 | sponge | 0.20 | ~0.39 | never (squashes) |
 | block | 0.35 | 0.85 | never (slips below hold) |
 
