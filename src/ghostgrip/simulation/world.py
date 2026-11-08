@@ -30,8 +30,9 @@ from dataclasses import dataclass, field
 import math
 from typing import Deque, Dict, List, Optional, Tuple
 
-from ghostgrip.contracts import (CONTACT, DAMAGE, HOLD, RELEASE, SLIP,
-                                 HandState, SimEvent)
+from contracts import CONTACT, DAMAGE, HOLD, RELEASE, SLIP
+from contracts import HandStateV2 as HandState
+from contracts import SimEventV2 as SimEvent
 from ghostgrip.simulation.objects import PROFILES, ObjectProfile
 
 # ---- world geometry (plan 6.2: B maps normalized 0..1 to a 960x540 world) ----

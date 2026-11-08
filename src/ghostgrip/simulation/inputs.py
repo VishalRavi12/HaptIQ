@@ -12,7 +12,7 @@ from pathlib import Path
 import random
 from typing import Iterable, List, Optional
 
-from ghostgrip.contracts import HandState
+from contracts import HandStateV2 as HandState
 
 TRACE_COLUMNS = ["t_ms", "x", "y", "q", "dq_dt", "vx", "vy",
                  "stable_score", "tracking_ok", "tracking_quality"]

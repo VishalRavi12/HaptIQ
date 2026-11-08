@@ -5,10 +5,12 @@ import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "src"))  # ghostgrip package
+sys.path.insert(0, str(REPO_ROOT))          # shared contracts.py
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from ghostgrip.contracts import HandState  # noqa: E402
+from contracts import HandStateV2 as HandState  # noqa: E402
 from ghostgrip.simulation.inputs import (MouseKeyboardAdapter, TracePlayer,  # noqa: E402
                                          TraceRecorder, load_trace)
 from ghostgrip.simulation.trial import CONDITIONS, FINISHED, TrialRunner  # noqa: E402

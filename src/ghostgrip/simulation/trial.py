@@ -11,7 +11,10 @@ may pick it up again until the timeout.
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from ghostgrip.contracts import DAMAGE, RELEASE, HandState, SimEvent, TrialOutcome
+from contracts import (CONDITION_AI, CONDITION_BASELINE, CONDITION_BOTH, CONDITION_HAPTIC,
+                       DAMAGE, RELEASE, TrialOutcome)
+from contracts import HandStateV2 as HandState
+from contracts import SimEventV2 as SimEvent
 from ghostgrip.simulation.world import OPEN_Q, World
 
 
@@ -23,12 +26,12 @@ class Condition:
     haptic: bool
 
 
-CONDITIONS: Dict[str, Condition] = {
-    "A": Condition("A", "Baseline", ai_assist=False, haptic=False),
-    "B": Condition("B", "AI only", ai_assist=True, haptic=False),
-    "C": Condition("C", "Haptic only", ai_assist=False, haptic=True),
-    "D": Condition("D", "AI + Haptic", ai_assist=True, haptic=True),
-}
+CONDITIONS: Dict[str, Condition] = {c.code: c for c in (
+    Condition(CONDITION_BASELINE, "Baseline", ai_assist=False, haptic=False),
+    Condition(CONDITION_AI, "AI only", ai_assist=True, haptic=False),
+    Condition(CONDITION_HAPTIC, "Haptic only", ai_assist=False, haptic=True),
+    Condition(CONDITION_BOTH, "AI + Haptic", ai_assist=True, haptic=True),
+)}
 
 READY, RUNNING, FINISHED = "READY", "RUNNING", "FINISHED"
 DEFAULT_TIMEOUT_MS = 30_000

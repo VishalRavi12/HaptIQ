@@ -16,11 +16,14 @@ import sys
 import time
 
 if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # .../src
+    # Run as a script: make the repo root (shared contracts.py) and src/ importable.
+    for _p in (Path(__file__).resolve().parents[3], Path(__file__).resolve().parents[2]):
+        if str(_p) not in sys.path:
+            sys.path.insert(0, str(_p))
 
 import pygame  # noqa: E402
 
-from ghostgrip.contracts import HandState  # noqa: E402
+from contracts import HandStateV2 as HandState  # noqa: E402
 from ghostgrip.simulation.inputs import MouseKeyboardAdapter, TracePlayer, TraceRecorder  # noqa: E402
 from ghostgrip.simulation.trial import CONDITIONS, READY, TrialRunner  # noqa: E402
 from ghostgrip.simulation.world import SCENES, WORLD_H, WORLD_W, World  # noqa: E402

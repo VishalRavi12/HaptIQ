@@ -15,23 +15,30 @@ Owner: Member B. Folders: `src/ghostgrip/simulation/`, `src/ghostgrip/ui/`, `tes
 
 ## Integration API (what other members call)
 
+Shared types come from the repository-root `contracts.py` (the one file every
+member uses). Inside this package `HandState` and `SimEvent` are short aliases
+for `contracts.HandStateV2` and `contracts.SimEventV2`. Both the repository root
+and `src/` must be importable (`app.py` and the tests set this up themselves).
+
 ```python
+from contracts import HandStateV2, SimEventV2, TrialOutcome, CONTACT, HOLD, SLIP, RELEASE, DAMAGE
 from ghostgrip.simulation.world import World
 from ghostgrip.simulation.trial import TrialRunner, CONDITIONS
 
 world = World("glass")                       # "glass" | "sponge" | "block" | "sandbox"
 world.set_assistance(cond.ai_assist, gain)   # gain 0..1 from Member D's adapt.py
-events = world.advance(hand_state, elapsed_s)   # list[SimEvent], one per transition
+events = world.advance(hand_state, elapsed_s)   # list[SimEventV2], one per transition
 outcome = trial.update(world, events, hand_state) # TrialOutcome when a trial ends
+                                             # condition = "A".."D", fail_reason "" on success
 snap = world.snapshot()                      # read-only WorldSnapshot for any renderer
 world.event_reason(event.event_id)           # e.g. "overgrip", "dropped", "tracking_lost"
 ```
 
 | Member | Gives B | Gets from B |
 |---|---|---|
-| A (perception) | `HandState` per frame: mirrored 0..1 pointer, calibrated `closure_q` | nothing; B replaces `MouseKeyboardAdapter` with A's source |
-| C (hardware) | nothing | `SimEvent`s only (never per-frame). C's `haptics.py` applies its own confidence gate using `HandState.tracking_quality` |
-| D (AI, metrics) | `Prediction` (ghost marker), `assist_gain` | `SimEvent`, `TrialOutcome`, `event_reason()` for logs |
+| A (perception) | `HandStateV2` per frame: mirrored 0..1 pointer, calibrated `closure_q` | nothing; B replaces `MouseKeyboardAdapter` with A's source |
+| C (hardware) | nothing | `SimEventV2`s only (never per-frame). C's `haptics.py` applies its own confidence gate using `HandStateV2.tracking_quality` |
+| D (AI, metrics) | `Prediction` (ghost marker), `assist_gain` | `SimEventV2`, `TrialOutcome`, `event_reason()` for logs |
 
 ## Event semantics C and D must know
 
@@ -53,5 +60,5 @@ world.event_reason(event.event_id)           # e.g. "overgrip", "dropped", "trac
 
 - `ui/app.py: stub_prediction()` -> Member D's `predict.py` (`Prediction`).
 - `ui/app.py: apply_condition()` fixed gain 1.0 -> Member D's `adapt.assist_gain`.
-- `MouseKeyboardAdapter` -> Member A's live `HandState` source.
+- `MouseKeyboardAdapter` -> Member A's live `HandStateV2` source.
 - Console prints of events -> Member C's `haptics.py` + Member D's logger.

@@ -7,9 +7,12 @@ from pathlib import Path
 import sys
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "src"))  # ghostgrip package
+sys.path.insert(0, str(REPO_ROOT))          # shared contracts.py
 
-from ghostgrip.contracts import CONTACT, DAMAGE, HOLD, RELEASE, SLIP, HandState  # noqa: E402
+from contracts import CONTACT, DAMAGE, HOLD, RELEASE, SLIP  # noqa: E402
+from contracts import HandStateV2 as HandState  # noqa: E402
 from ghostgrip.simulation import world as W  # noqa: E402
 from ghostgrip.simulation.world import World  # noqa: E402
 
