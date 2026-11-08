@@ -1,0 +1,3 @@
+# Install after the basic proof of concept works.
+scikit-learn>=1.4,<2
+pandas>=2,<3

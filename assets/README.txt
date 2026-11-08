@@ -1,0 +1,1 @@
+Run python download_hand_model.py from the project root to download the Google MediaPipe model. The binary model is not bundled with this starter zip.
