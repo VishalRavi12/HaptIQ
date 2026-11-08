@@ -25,7 +25,12 @@ Last updated: 2026-11-07. Only observed facts; nothing here is a measured perfor
 
 ## Safety gate status (plan section 8)
 - [x] Servo model identified (SG-5010, standard positional servo)
-- [ ] Supply voltage and current measured (no multimeter yet; USB VBUS assumed 5V)
+- [x] Supply voltage measured at the servo plug (2026-11-08, Crenova MS8233D, DC V):
+  - Pico on the laptop/hub USB: 4.93 V at rest, dipping to 4.16-4.56 V while the servo moved
+    (below the SG-5010's 4.8 V rating). **Do not power the servo from the laptop or hub.**
+  - Pico on the desk power strip's USB charging port: **5.23 V, steady while the servo moved**
+    (8/8 swings, 80-100 degrees). This is the supply to use for the demo.
+  - The meter shows a few readings per second, so very short dips may not be visible.
 - [x] 12V kit adapter NOT wired to the servo
 - [x] Grounds shared with external supply (Metro GND to the breadboard - rail, verified with a pin-check sketch)
 - [x] Travel tested unloaded within the 80-100 degree window (2026-11-08); window not widened
