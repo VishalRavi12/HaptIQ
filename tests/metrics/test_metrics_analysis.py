@@ -9,13 +9,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))   # ghostgrip package
 sys.path.insert(0, str(REPO_ROOT))           # shared contracts.py
 
-from contracts import TrialOutcome  # noqa: E402
+from contracts import HandStateV2, TrialOutcome  # noqa: E402
 from ghostgrip.ai.adapt import AssistDecision  # noqa: E402
 from ghostgrip.ai.predict import KalmanPredictor, ErrorTracker, evaluate  # noqa: E402
 from ghostgrip.ai.synthetic import make_scenario  # noqa: E402
 from ghostgrip.metrics import analysis as A  # noqa: E402
-from ghostgrip.metrics.analysis import (TrialRecord, classification_report, format_summary,  # noqa: E402
-                                        prediction_error, summarize_trials, trial_records)
+from ghostgrip.metrics.analysis import (TrialRecord, assist_availability, classification_report,  # noqa: E402
+                                        format_summary, prediction_error, summarize_trials, trial_records)
 from ghostgrip.metrics.logger import SessionLogger, read_session  # noqa: E402
 
 
@@ -150,6 +150,54 @@ class TestPredictionError(unittest.TestCase):
             result = prediction_error(read_session(tmp)["frames"])
         self.assertEqual(sorted(result), [("synthetic", "A"), ("synthetic", "B")])
         self.assertNotEqual(result[("synthetic", "A")]["kalman"], result[("synthetic", "B")]["kalman"])
+
+
+class TestAssistAvailability(unittest.TestCase):
+    def logged(self, plan):
+        """plan: {condition: [(reason, gain), ...]}; returns the frame rows."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with SessionLogger(tmp, "s1", "synthetic") as log:
+                t = 0
+                for condition, steps in plan.items():
+                    for reason, gain in steps:
+                        t += 33
+                        hand = HandStateV2(t, (0.5, 0.5), 0.0, 0.0, (0.0, 0.0), 1.0, True, 0.9)
+                        log.log_frame(hand, None, None, AssistDecision(gain, reason), condition=condition)
+            return read_session(tmp)["frames"]
+
+    def test_the_share_counts_only_frames_where_the_condition_allows_assistance(self):
+        rows = self.logged({"A": [("condition_off", 0.0)] * 5,
+                            "B": [("ok", 0.4)] * 6 + [("predictor_worse_than_baseline", 0.0)] * 2
+                                 + [("tracking_lost", 0.0)] * 2})
+        a, b = assist_availability(rows)
+        self.assertEqual((a.condition, a.frames, a.permitted, a.active, a.share_active), ("A", 5, 0, 0, None))
+        self.assertEqual((b.condition, b.frames, b.permitted, b.active), ("B", 10, 10, 6))
+        self.assertAlmostEqual(b.share_active, 0.6)
+        self.assertEqual(b.reasons, {"ok": 6, "predictor_worse_than_baseline": 2, "tracking_lost": 2})
+
+    def test_a_gain_of_zero_is_not_active_even_with_an_ok_reason(self):
+        rows = self.logged({"D": [("ok", 0.0), ("ok", 0.3)]})
+        self.assertEqual(assist_availability(rows)[0].active, 1)
+
+    def test_frames_without_a_condition_are_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with SessionLogger(tmp, "s1", "synthetic") as log:
+                log.log_frame(make_scenario("clean")[0], None, None, AssistDecision(0.5, "ok"))
+            self.assertEqual(assist_availability(read_session(tmp)["frames"]), [])
+
+    def test_the_results_table_says_how_much_assistance_the_conditions_really_got(self):
+        rows = self.logged({"B": [("ok", 0.4)] * 3 + [("tracking_lost", 0.0)]})
+        text = format_summary(summarize_trials([rec(1, cond="B")]), None, assist_availability(rows))
+        self.assertIn("assistance actually on", text)
+        self.assertIn("B: 75% of 4 frames", text)
+        self.assertIn("tracking_lost 1", text)
+        plain = format_summary(summarize_trials([rec(1, cond="B")]))
+        self.assertNotIn("assistance actually on", plain)
+
+    def test_a_condition_with_assistance_always_off_is_not_listed(self):
+        rows = self.logged({"A": [("condition_off", 0.0)] * 3})
+        text = format_summary(summarize_trials([rec(1, cond="A")]), None, assist_availability(rows))
+        self.assertNotIn("assistance actually on", text)     # nothing was ever allowed, so nothing to say
 
 
 class TestClassificationReport(unittest.TestCase):

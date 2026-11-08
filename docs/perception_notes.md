@@ -131,16 +131,21 @@ The preview uses the same `CameraTracker` acquisition code. Its new timing scope
 includes image wrapping plus detection, excluding capture, color conversion,
 rendering and smoothing delay. FPS includes the preview loop.
 
-### Remaining live/integration checks
+### Phase 2 integration status
 
-- Verify the refactored preview with the actual camera: move left/right,
-  open/pinch, hide the hand and restore it. Repeat the 20-second measurement.
-- Close the preview, then verify the terminal source stops after 150 states.
-- B/D connect their simulator/predictor to the source and honor tracking loss.
-  For CSV replay, use `read_trace` or map the column names below; consumers that
-  expect legacy `x/y/q/vx/vy` columns need an explicit adapter.
-- Submit Member A's branch for review after these checks. Hardware and combined
-  end-to-end validation remain team integration tasks.
+The reusable source is now connected to the actual predictor, simulator and
+logger by merged PR #17; PR #18 improves board status. The simulator also reads
+Member A CSV columns. Those integration implementation tasks are no longer open.
+
+The final Member A audit is based on `ee7be60`, on branch `final-a-validation`.
+See [the final handoff](final_handoff_A.md) for numbered A1-A6 status, synthetic
+tests, reproducible timing/cleanup requests to B and manual acceptance fields.
+
+An integrated camera launch was attempted in this Codex process; macOS denied
+camera access, so no real three-object transfer or integrated performance is
+claimed. The saved calibration is present. Final camera checks must run in the
+operator's authorized terminal; physical disarm needs C's board observation.
+Existing preview performance and recordings below remain historical evidence.
 
 ## Local trace recording
 

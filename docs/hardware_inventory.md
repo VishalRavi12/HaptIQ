@@ -19,20 +19,28 @@ Last updated: 2026-11-07. Only observed facts; nothing here is a measured perfor
 | Touch Sensor v1.1 | D2 | Works: touch and release detected exactly |
 | Piezo Vibration Sensor + MEAS film | D6 (film in J1) | Works after turning **R6 clockwise**; before that it reported vibration continuously |
 | Grove Button | D3 | Works (2026-11-08): every press disarms and latches; ARM refused while held. `BUTTON_CONNECTED` is 1 |
-| Buzzer, rotary, accelerometer, LCD | D7, A0, I2C | Not yet tested |
+| Grove Buzzer | D7 | Works (2026-11-08): 3 SLIP + 1 DAMAGE cues from the laptop gave 4 short beeps (heard by the operator). Beep is 120 ms, only on accepted SLIP/DAMAGE cues; STOP, button, fault and watchdog silence it (mock tests). Disable with `BUZZER_ENABLED 0` |
+| Rotary, accelerometer, LCD | A0, I2C | Not tested (cut from the final plan) |
 | Servo | D9 (shield header: 9th hole from the SCL end, verified with a pin-check sketch) | Works unloaded (2026-11-08). Powered from a Raspberry Pi Pico H used only as a 5V USB adapter (pin 40 VBUS / pin 38 GND to the breadboard rails), ground shared with the Metro. `SERVO_ENABLED` is 1 |
 
 ## Safety gate status (plan section 8)
 - [x] Servo model identified (SG-5010, standard positional servo)
-- [ ] Supply voltage and current measured (no multimeter yet; USB VBUS assumed 5V)
+- [x] Supply voltage measured at the servo plug (2026-11-08, Crenova MS8233D, DC V):
+  - Pico on the laptop/hub USB: 4.93 V at rest, dipping to 4.16-4.56 V while the servo moved
+    (below the SG-5010's 4.8 V rating). **Do not power the servo from the laptop or hub.**
+  - Pico on the desk power strip's USB charging port: **5.23 V, steady while the servo moved**
+    (8/8 swings, 80-100 degrees). This is the supply to use for the demo.
+  - The meter shows a few readings per second, so very short dips may not be visible.
 - [x] 12V kit adapter NOT wired to the servo
 - [x] Grounds shared with external supply (Metro GND to the breadboard - rail, verified with a pin-check sketch)
 - [x] Travel tested unloaded within the 80-100 degree window (2026-11-08); window not widened
 - [x] Emergency stop button tested mid-cue (2026-11-08): pressed during continuous 80/100 degree swings, board disarmed, then ARM refused LATCHED and CUE refused until STOP
 - [x] Watchdog, STOP, latch and command rejection tested on the real Metro (LED path, 2026-11-07)
-- [ ] Neutral state tested with the servo attached
+- [x] Neutral state tested with the horn attached (2026-11-08): armed and held at 90 degrees for 5 s, and for 3 s after 4 swings; no creep, twitch or buzz (observed by Sindhu and Vishal). Servo is on a table stand, not on a person
 - [x] 10 repeated cycles without heat or noise (2026-11-08: 20/20 moves acknowledged; case cool and quiet by touch afterwards)
-- [ ] Second team member observes first trial
+- [x] Second team member observes first trial (2026-11-08: Sindhu and Vishal watched the neutral hold and 4 swings at 80-100 degrees: small, controlled, no twitch or buzz)
+
+**Servo decision (C4, 2026-11-08): GO for the non-contact table demo** inside the 80-100 degree window, with the Pico on a wall USB port. It still must not touch a person: the band was cut from the final plan, so the finger-safety item above has not been tested.
 
 No human contact with the servo until every box is checked.
 

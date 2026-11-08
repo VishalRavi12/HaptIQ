@@ -173,6 +173,47 @@ def prediction_error(frame_rows: Iterable[Dict[str, str]]) -> Dict[Tuple[str, st
     return result
 
 
+# ====================================================================== assistance availability
+@dataclass(frozen=True)
+class AssistAvailability:
+    origin: str
+    condition: str
+    frames: int                 # all logged frames of this condition
+    permitted: int              # frames where the condition allows assistance (not "condition_off")
+    active: int                 # permitted frames that actually had a gain above 0
+    reasons: Dict[str, int]     # permitted frames by reason ("ok", "tracking_lost", ...)
+
+    @property
+    def share_active(self) -> Optional[float]:
+        return self.active / self.permitted if self.permitted else None
+
+
+def assist_availability(frame_rows: Iterable[Dict[str, str]]) -> List[AssistAvailability]:
+    """How often assistance was actually on, per (origin, condition), from frames.csv.
+
+    A condition with AI assistance can still have it off for stretches (tracking lost, low quality,
+    a stale or unknown forecast, or the predictor losing to a baseline). Without this, a comparison
+    of A with B or D would not say how much assistance B and D really got. Conditions that never
+    allow assistance (A, C) report share None."""
+    counts: Dict[Tuple[str, str], Dict] = {}
+    for row in frame_rows:
+        if row["condition"] == "":
+            continue
+        slot = counts.setdefault((row["origin"], row["condition"]),
+                                 {"frames": 0, "permitted": 0, "active": 0, "reasons": {}})
+        slot["frames"] += 1
+        reason = row["assist_reason"]
+        if reason in ("", "condition_off", "assist_off_in_condition"):
+            continue
+        slot["permitted"] += 1
+        slot["reasons"][reason] = slot["reasons"].get(reason, 0) + 1
+        if row["assist_gain"] != "" and float(row["assist_gain"]) > 0.0:
+            slot["active"] += 1
+    order = {c: i for i, c in enumerate(CONDITION_CODES)}
+    return [AssistAvailability(origin, condition, v["frames"], v["permitted"], v["active"], v["reasons"])
+            for (origin, condition), v in sorted(counts.items(), key=lambda kv: (kv[0][0], order.get(kv[0][1], 99)))]
+
+
 # ====================================================================== intent F1
 def classification_report(truth: Sequence[str], predicted: Sequence[str],
                           labels: Optional[Sequence[str]] = None) -> Dict:
@@ -233,7 +274,8 @@ def _ms(value) -> str:
 
 
 def format_summary(summaries: Sequence[ConditionSummary],
-                   errors: Optional[Dict[Tuple[str, str], Dict[str, float]]] = None) -> str:
+                   errors: Optional[Dict[Tuple[str, str], Dict[str, float]]] = None,
+                   availability: Optional[Sequence[AssistAvailability]] = None) -> str:
     """A plain-text results table. Synthetic rows are labelled; real and synthetic are never pooled."""
     lines = []
     for origin in sorted({s.origin for s in summaries}):
@@ -256,6 +298,12 @@ def format_summary(summaries: Sequence[ConditionSummary],
                     lines.append(f"    {condition}: kalman {e['kalman']:.4f}  no-movement {e['no_movement']:.4f}  "
                                  f"constant-velocity {e['constant_velocity']:.4f}  "
                                  f"(in 2-sigma {100 * e['within_2_sigma']:.0f}%, n={e['scored']})")
+        shown = [a for a in (availability or []) if a.origin == origin and a.permitted]
+        if shown:
+            lines.append("  assistance actually on (share of the frames where the condition allows it):")
+            for a in shown:
+                why = ", ".join(f"{k} {v}" for k, v in sorted(a.reasons.items(), key=lambda kv: -kv[1]))
+                lines.append(f"    {a.condition}: {_pct(a.share_active)} of {a.permitted} frames  ({why})")
         lines.append("")
     lines.append("valid = finished with tracking intact; 'lost' (tracking_lost) and 'incompl' trials are "
                  "reported, not counted as failures. Slip and over-grip describe the simulation, not a real object.")
