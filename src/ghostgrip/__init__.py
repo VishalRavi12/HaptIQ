@@ -1,1 +1,2 @@
-"""GhostGrip package. Each member owns one subpackage (see AGENTS.md)."""
+"""GhostGrip package. The shared interfaces between members live in the
+repository-root contracts.py (import with `from contracts import ...`)."""
