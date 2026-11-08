@@ -27,18 +27,21 @@ class HudInfo:
     recording: bool
     ghost_on: bool
     haptic_routing: bool
+    intent: str = ""            # Member D's intent state, e.g. "HOLDING glass"
+    assist_source: str = ""     # "AI" (Member D's AssistPolicy) or "manual"
+    board: str = ""             # Member C's board: NO BOARD / DISARMED / ARMED; "" = no hardware
+    board_detail: str = ""      # last cue result
 
 
 HELP = [
-    "Mouse move: hand position",
-    "Left hold / W: close   Right hold / S: open",
-    "Wheel: set grip (stays)   Space: open hand",
-    "1 glass  2 sponge  3 block  0 sandbox",
-    "F1-F4: condition A-D   N: next trial",
-    "[ / ]: assist gain -/+ 0.1 (conditions B, D)",
-    "T: lose tracking  L: low quality  J: jitter",
-    "G: ghost  F9: record trace  R: reset  Esc: quit",
+    "Mouse: move   Left/W close   Right/S open",
+    "Wheel grip  Space open  G ghost  F9 rec",
+    "1/2/3/0: glass/sponge/block/all  N: next",
+    "F1-F4: condition A-D   [ ]: manual assist",
+    "T/L/J: lose tracking/low quality/jitter",
+    "H arm  X STOP board  V camera  Esc quit",
 ]
+BOARD_COLORS = {"ARMED": (110, 230, 150), "DISARMED": (255, 200, 90)}
 
 
 class Hud:
@@ -77,14 +80,19 @@ class Hud:
             assist = f"ON gain {snap.assist_gain:0.2f}"
         else:
             assist = f"PAUSED gain {snap.assist_gain:0.2f}"   # unreliable tracking or gain 0
-        y = self._line(surf, f"Assist: {assist}   Ghost: {'ON' if info.ghost_on else 'OFF'}"
+        source = f" ({info.assist_source})" if info.assist_source and snap.assist_enabled else ""
+        y = self._line(surf, f"Assist: {assist}{source}", x, y, color=DIM)
+        y = self._line(surf, f"Intent: {info.intent or '-'}   Ghost: {'ON' if info.ghost_on else 'OFF'}"
                              f"{'   REC' if info.recording else ''}", x, y, color=DIM)
+        if info.board:
+            y = self._line(surf, f"Board: {info.board}  {info.board_detail}", x, y,
+                           color=BOARD_COLORS.get(info.board, (255, 110, 110)))
         y += 4
         kind = snap.engaged_id or (info.object_kind if info.object_kind in PROFILES else None)
         y = self._grip_meter(surf, x, y, snap.q, kind)
         y += 8
         y = self._line(surf, "Recent events (sent once each):", x, y, color=DIM)
-        for t, kind_, obj, reason in list(snap.recent_events)[-5:]:
+        for t, kind_, obj, reason in list(snap.recent_events)[-3:]:
             y = self._line(surf, f"{kind_:7s} {obj:6s} {reason}", x + 6, y)
         y = max(y + 6, self.h - len(HELP) * 19 - 8)
         for h in HELP:
