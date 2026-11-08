@@ -12,6 +12,7 @@
 // watchdog faults if the host goes quiet; malformed, out-of-range or stale commands never move anything.
 // After a button press, watchdog or fault the board is latched: it needs STOP, then ARM.
 // Only CONTACT cues move the servo; every other cue is lights only.
+// SLIP and DAMAGE also beep the buzzer briefly; STOP, the button, a fault or the watchdog silence it.
 #include "pins.h"
 #if SERVO_ENABLED
 #include <Servo.h>
@@ -27,6 +28,7 @@ State state = DISARMED;
 const unsigned long CUE_COOLDOWN_MS = 500;
 const unsigned long MAX_CUE_MS      = 500;
 const unsigned long SAMPLE_EVERY_MS = 50;
+const unsigned long BEEP_MS         = 120;  // never longer than the cue itself
 const long MAX_NUMBER = 100000000L;
 const int MAX_LINE = 48;
 const int MAX_FIELDS = 5;
@@ -45,6 +47,8 @@ unsigned long lastHostMs = 0;
 unsigned long lastCueStartMs = 0;
 bool cueEverStarted = false;
 unsigned long cueEndMs = 0;
+bool beeping = false;
+unsigned long beepEndMs = 0;
 unsigned long lastSampleMs = 0;
 bool piezoSeen = false;
 
@@ -69,9 +73,14 @@ void servoNeutral() {
 #endif
 }
 
+void buzzerOff() {
+  digitalWrite(BUZZER_PIN, LOW);
+  beeping = false;
+}
+
 void disarm(State next) {
   servoNeutral();
-  digitalWrite(BUZZER_PIN, LOW);
+  buzzerOff();
   state = next;
 }
 
@@ -204,6 +213,13 @@ void handleLine(char *text) {
       servo.write((int)angle);
     }
 #endif
+#if BUZZER_ENABLED
+    if (strcmp(fields[2], "SLIP") == 0 || strcmp(fields[2], "DAMAGE") == 0) {
+      digitalWrite(BUZZER_PIN, HIGH);
+      beeping = true;
+      beepEndMs = millis() + (duration < (long)BEEP_MS ? duration : BEEP_MS);
+    }
+#endif
     badPackets = 0;
     sendAck(seq);
     return;
@@ -245,8 +261,12 @@ void updateTimers() {
     disarm(FAULT);
     latched = true;
   }
+  if (beeping && (long)(millis() - beepEndMs) >= 0) {
+    buzzerOff();
+  }
   if (state == CUE_ACTIVE && (long)(millis() - cueEndMs) >= 0) {
     servoNeutral();
+    buzzerOff();
     state = ARMED_IDLE;
   }
 }

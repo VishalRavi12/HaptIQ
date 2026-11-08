@@ -18,6 +18,12 @@ const int SERVO_PIN     = 9;   // TowerPro SG-5010 signal only; needs its own 4.
 #define BUTTON_CONNECTED 1   // Grove Button on D3, connected 2026-11-08
 #endif
 
+// Grove Buzzer on D7: a short beep on accepted SLIP and DAMAGE cues. Set to 0 to keep it silent
+// (for example if it has not been verified on the real board).
+#ifndef BUZZER_ENABLED
+#define BUZZER_ENABLED 1
+#endif
+
 // Servo stays electrically idle until it has passed the hardware safety gate (plan section 8).
 // Set to 1 only after the servo has been tested unloaded on a verified supply.
 #ifndef SERVO_ENABLED
