@@ -2,7 +2,8 @@
 
 Run from the repository root:
     .venv\\Scripts\\python.exe src\\ghostgrip\\ui\\app.py
-    .venv\\Scripts\\python.exe src\\ghostgrip\\ui\\app.py --scene sandbox --condition B
+    .venv\\Scripts\\python.exe src\\ghostgrip\\ui\\app.py --scene sandbox --condition B --assist-gain 0.5
+    .venv\\Scripts\\python.exe src\\ghostgrip\\ui\\app.py --replay clean     # shared trace by name
     .venv\\Scripts\\python.exe src\\ghostgrip\\ui\\app.py --replay data\\local\\trace_XXXX.csv
 
 This is a stand-alone demo for Phase 1. In Phase 2, Member D's main loop does the
@@ -25,13 +26,16 @@ import pygame  # noqa: E402
 
 from contracts import HandStateV2 as HandState  # noqa: E402
 from ghostgrip.simulation.inputs import MouseKeyboardAdapter, TracePlayer, TraceRecorder  # noqa: E402
-from ghostgrip.simulation.trial import CONDITIONS, READY, TrialRunner  # noqa: E402
+from ghostgrip.simulation.trial import (CONDITIONS, READY, TrialRunner,  # noqa: E402
+                                        append_outcome_csv, last_trial_id)
 from ghostgrip.simulation.world import SCENES, WORLD_H, WORLD_W, World  # noqa: E402
 from ghostgrip.ui.hud import PANEL_W, Hud, HudInfo  # noqa: E402
 from ghostgrip.ui.renderer_2d import Renderer2D  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+SYNTHETIC_DIR = REPO_ROOT / "data" / "synthetic"
 GHOST_HORIZON_S = 0.12
+GAIN_STEP = 0.1
 SCENE_KEYS = {pygame.K_1: "glass", pygame.K_2: "sponge", pygame.K_3: "block", pygame.K_0: "sandbox"}
 CONDITION_KEYS = {pygame.K_F1: "A", pygame.K_F2: "B", pygame.K_F3: "C", pygame.K_F4: "D"}
 
@@ -50,12 +54,35 @@ def parse_args(argv=None):
     ap = argparse.ArgumentParser(description="GhostGrip Member B simulation demo")
     ap.add_argument("--scene", default="glass", choices=list(SCENES))
     ap.add_argument("--condition", default="A", choices=list(CONDITIONS))
-    ap.add_argument("--replay", default=None, help="CSV trace to replay instead of the mouse")
+    ap.add_argument("--replay", default=None,
+                    help="CSV trace to replay instead of the mouse, or a shared synthetic trace "
+                         f"name: {', '.join(synthetic_names()) or '(none found)'}")
     ap.add_argument("--loop", action="store_true", help="loop the replay")
+    ap.add_argument("--assist-gain", type=float, default=1.0,
+                    help="assistance gain 0..1 for conditions B and D (stand-in for Member D's "
+                         "adapt.py; clamped)")
     ap.add_argument("--fps", type=int, default=60, help="display frame cap (physics stays 60 Hz)")
     ap.add_argument("--session-id", default="anonymous")
+    ap.add_argument("--no-log", action="store_true",
+                    help="do not append finished trials to data/local/trials_<session>.csv")
     ap.add_argument("--max-frames", type=int, default=0, help="quit after N frames (smoke test)")
     return ap.parse_args(argv)
+
+
+def synthetic_names():
+    return sorted(p.stem for p in SYNTHETIC_DIR.glob("*.csv"))
+
+
+def resolve_replay(arg):
+    """A path, or the bare name of a shared trace in data/synthetic/ (e.g. 'clean')."""
+    path = Path(arg)
+    if path.exists():
+        return path
+    named = SYNTHETIC_DIR / f"{arg}.csv"
+    if named.exists():
+        return named
+    raise SystemExit(f"--replay: no file {arg!r} and no synthetic trace of that name "
+                     f"(choose from: {', '.join(synthetic_names())})")
 
 
 def main(argv=None) -> int:
@@ -70,25 +97,31 @@ def main(argv=None) -> int:
     hud = Hud(WORLD_W, WORLD_H)
     condition = CONDITIONS[args.condition]
     adapter = MouseKeyboardAdapter()
-    player = TracePlayer.from_csv(args.replay, loop=args.loop) if args.replay else None
+    replay_path = resolve_replay(args.replay) if args.replay else None
+    player = TracePlayer.from_csv(replay_path, loop=args.loop) if replay_path else None
     recorder = None
     all_outcomes = []
     tally = {}
     ghost_on = True
     banner = None
+    # Bounded assistance gain (plan B5.03). Stand-in for Member D's adapt.assist_gain.
+    gain = min(1.0, max(0.0, args.assist_gain))
+    log_path = None if args.no_log else (
+        REPO_ROOT / "data" / "local" / f"trials_{args.session_id}.csv")
+    # Trial ids keep counting across scene switches and app restarts.
+    last_id = last_trial_id(log_path, args.session_id) if log_path else 0
 
     def apply_condition():
-        # Stand-in gain 1.0 until Member D's adapt.assist_gain is wired in.
-        world.set_assistance(condition.ai_assist, 1.0 if condition.ai_assist else 0.0)
+        world.set_assistance(condition.ai_assist, gain if condition.ai_assist else 0.0)
 
     def new_trial_runner():
         obj = world.scene if world.scene != "sandbox" else "glass"
-        return TrialRunner(obj, condition, args.session_id)
+        return TrialRunner(obj, condition, args.session_id, first_trial_id=last_id + 1)
 
     apply_condition()
     trial = new_trial_runner()
     print(f"GhostGrip sim | scene={world.scene} condition={condition.code} ({condition.label}) "
-          f"input={'replay' if player else 'mouse'}")
+          f"assist_gain={gain:0.2f} input={'replay ' + str(replay_path) if player else 'mouse'}")
 
     t0 = last = time.monotonic()
     frames = 0
@@ -135,6 +168,12 @@ def main(argv=None) -> int:
                         adapter.jitter = not adapter.jitter
                     elif k == pygame.K_g:
                         ghost_on = not ghost_on
+                    elif k in (pygame.K_LEFTBRACKET, pygame.K_RIGHTBRACKET):
+                        step = GAIN_STEP if k == pygame.K_RIGHTBRACKET else -GAIN_STEP
+                        gain = round(min(1.0, max(0.0, gain + step)), 2)
+                        apply_condition()
+                        print(f"Assist gain -> {gain:0.2f}"
+                              f"{'' if condition.ai_assist else ' (no effect: condition has AI off)'}")
                     elif k == pygame.K_F9:
                         if recorder is None:
                             recorder = TraceRecorder()
@@ -174,6 +213,7 @@ def main(argv=None) -> int:
                 outcome = trial.update(world, events, hand)
                 if outcome is not None:
                     all_outcomes.append(outcome)
+                    last_id = max(last_id, outcome.trial_id)
                     s_n = tally.setdefault(outcome.condition, [0, 0])
                     s_n[0] += int(outcome.success)
                     s_n[1] += 1
@@ -182,6 +222,8 @@ def main(argv=None) -> int:
                               if outcome.success else
                               (f"FAILED: {outcome.fail_reason}  (N: next trial)", (255, 110, 110)))
                     print("TRIAL", outcome)
+                    if log_path is not None:
+                        append_outcome_csv(log_path, outcome)
 
             # ---- draw ----
             snap = world.snapshot()
@@ -210,6 +252,8 @@ def main(argv=None) -> int:
             print("\nSession summary (mouse/replay trials, synthetic physics):")
             for code, (s, n) in sorted(tally.items()):
                 print(f"  Condition {code}: {s}/{n} successful")
+            if log_path is not None:
+                print(f"  Trial log (stand-in for Member D's logger): {log_path}")
         pygame.quit()
     return 0
 

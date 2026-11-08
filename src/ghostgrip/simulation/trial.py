@@ -8,7 +8,9 @@ Failures: damaged (over-grip or hard drop), tracking_lost (invalid trial),
 timeout. Dropping it outside the target is not a failure by itself: the user
 may pick it up again until the timeout.
 """
-from dataclasses import dataclass
+import csv
+from dataclasses import astuple, dataclass, fields
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from contracts import (CONDITION_AI, CONDITION_BASELINE, CONDITION_BOTH, CONDITION_HAPTIC,
@@ -41,13 +43,13 @@ DWELL_MS = 300.0
 class TrialRunner:
     def __init__(self, object_id: str, condition: Condition = CONDITIONS["A"],
                  session_id: str = "anonymous", timeout_ms: int = DEFAULT_TIMEOUT_MS,
-                 dwell_ms: float = DWELL_MS):
+                 dwell_ms: float = DWELL_MS, first_trial_id: int = 1):
         self.object_id = object_id
         self.condition = condition
         self.session_id = session_id
         self.timeout_ms = timeout_ms
         self.dwell_ms = dwell_ms
-        self.trial_id = 0
+        self.trial_id = max(1, int(first_trial_id)) - 1   # incremented when a trial starts
         self.outcomes: List[TrialOutcome] = []
         self.next_trial()
 
@@ -104,3 +106,46 @@ class TrialRunner:
             overgrip_count=world.overgrip_count - self._over0)
         self.outcomes.append(self.outcome)
         return self.outcome
+
+
+# ------------------------------------------------------------------ outcome log
+# STAND-IN until Member D's metrics logger exists: one CSV row per finished trial,
+# columns in TrialOutcome field order. Real sessions go to the gitignored data/local/.
+OUTCOME_COLUMNS = [f.name for f in fields(TrialOutcome)]
+
+
+def append_outcome_csv(path, outcome: TrialOutcome) -> Path:
+    """Append one TrialOutcome; writes the header first if the file is new."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    new_file = not path.exists() or path.stat().st_size == 0
+    with path.open("a", newline="") as f:
+        w = csv.writer(f)
+        if new_file:
+            w.writerow(OUTCOME_COLUMNS)
+        w.writerow(astuple(outcome))
+    return path
+
+
+def last_trial_id(path, session_id: str) -> int:
+    """Highest trial_id already logged for this session (0 if none), so a new run
+    of the app continues the numbering instead of repeating it."""
+    path = Path(path)
+    if not path.exists():
+        return 0
+    ids = [o.trial_id for o in load_outcomes_csv(path) if o.session_id == session_id]
+    return max(ids, default=0)
+
+
+def load_outcomes_csv(path) -> List[TrialOutcome]:
+    """Read a file written by append_outcome_csv back into TrialOutcome objects."""
+    out = []
+    with Path(path).open(newline="") as f:
+        for r in csv.DictReader(f):
+            out.append(TrialOutcome(
+                session_id=r["session_id"], trial_id=int(r["trial_id"]),
+                condition=r["condition"], success=r["success"] == "True",
+                fail_reason=r["fail_reason"], start_ms=int(r["start_ms"]),
+                end_ms=int(r["end_ms"]), slip_count=int(r["slip_count"]),
+                overgrip_count=int(r["overgrip_count"])))
+    return out

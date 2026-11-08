@@ -106,14 +106,29 @@ def save_trace(path, states: Iterable[HandState]) -> Path:
     return path
 
 
+# Member A's recorder (vision/trace.py, `vision_preview.py --record`) writes the same values
+# under longer column names. load_trace reads either layout, so a real hand recording
+# replays in the simulation with no conversion step.
+VISION_COLUMNS = {"x": "pointer_x", "y": "pointer_y", "q": "closure_q",
+                  "vx": "velocity_x", "vy": "velocity_y"}
+
+
 def load_trace(path) -> List[HandState]:
     rows = []
     with Path(path).open(newline="") as f:
-        for r in csv.DictReader(f):
+        reader = csv.DictReader(f)
+        names = set(reader.fieldnames or ())
+        if {"x", "y", "q"} <= names:
+            col = {k: k for k in VISION_COLUMNS}                 # simulation layout
+        elif set(VISION_COLUMNS.values()) <= names:
+            col = dict(VISION_COLUMNS)                           # Member A's layout
+        else:
+            raise ValueError(f"trace {path}: unknown columns {sorted(names)}")
+        for r in reader:
             rows.append(HandState(
-                int(float(r["t_ms"])), (float(r["x"]), float(r["y"])), float(r["q"]),
+                int(float(r["t_ms"])), (float(r[col["x"]]), float(r[col["y"]])), float(r[col["q"]]),
                 float(r.get("dq_dt") or 0.0),
-                (float(r.get("vx") or 0.0), float(r.get("vy") or 0.0)),
+                (float(r.get(col["vx"]) or 0.0), float(r.get(col["vy"]) or 0.0)),
                 float(r.get("stable_score") or 1.0),
                 str(r["tracking_ok"]).strip().lower() in ("1", "true"),
                 float(r.get("tracking_quality") or 1.0)))
