@@ -32,7 +32,9 @@ class Renderer2D:
 
     def draw(self, surf: pygame.Surface, snap: WorldSnapshot,
              ghost_world: Optional[Tuple[float, float]] = None,
-             banner: Optional[Tuple[str, Tuple[int, int, int]]] = None) -> None:
+             banner: Optional[Tuple[str, Tuple[int, int, int]]] = None,
+             hand_points=None) -> None:
+        # hand_points (camera landmarks) are only used by the 3D view's hand; ignored here.
         surf.fill(BG, pygame.Rect(0, 0, WORLD_W, WORLD_H))
         self._overlay.fill((0, 0, 0, 0))
         self._draw_table(surf, snap)

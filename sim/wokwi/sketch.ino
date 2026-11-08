@@ -18,6 +18,7 @@
 // watchdog faults if the host goes quiet; malformed, out-of-range or stale commands never move anything.
 // After a button press, watchdog or fault the board is latched: it needs STOP, then ARM.
 // Only CONTACT cues move the servo; every other cue is lights only.
+// SLIP and DAMAGE also beep the buzzer briefly; STOP, the button, a fault or the watchdog silence it.
 // GhostGrip pin map (Member C). Board: Adafruit Metro 328 + Grove Base Shield V2 set to 5V.
 // Tested on hardware 2026-11-07: TOUCH_PIN, PIEZO_PIN and LED_GREEN_PIN.
 
@@ -34,13 +35,19 @@ const int SERVO_PIN     = 9;   // TowerPro SG-5010 signal only; needs its own 4.
 // so the emergency STOP button is active. Until then, STOP is only available over serial.
 // (The #ifndef lets the Wokwi simulator turn it on without editing this file.)
 #ifndef BUTTON_CONNECTED
-#define BUTTON_CONNECTED 0
+#define BUTTON_CONNECTED 1   // Grove Button on D3, connected 2026-11-08
+#endif
+
+// Grove Buzzer on D7: a short beep on accepted SLIP and DAMAGE cues. Set to 0 to keep it silent
+// (for example if it has not been verified on the real board).
+#ifndef BUZZER_ENABLED
+#define BUZZER_ENABLED 1
 #endif
 
 // Servo stays electrically idle until it has passed the hardware safety gate (plan section 8).
 // Set to 1 only after the servo has been tested unloaded on a verified supply.
 #ifndef SERVO_ENABLED
-#define SERVO_ENABLED 0
+#define SERVO_ENABLED 1   // powered from the Pico 5V rail, first unloaded test 2026-11-08
 #endif
 
 // Safe angle window around neutral. Narrow on purpose; widen only after unloaded testing.
@@ -65,6 +72,7 @@ State state = DISARMED;
 const unsigned long CUE_COOLDOWN_MS = 500;
 const unsigned long MAX_CUE_MS      = 500;
 const unsigned long SAMPLE_EVERY_MS = 50;
+const unsigned long BEEP_MS         = 120;  // never longer than the cue itself
 const long MAX_NUMBER = 100000000L;
 const int MAX_LINE = 48;
 const int MAX_FIELDS = 5;
@@ -83,6 +91,8 @@ unsigned long lastHostMs = 0;
 unsigned long lastCueStartMs = 0;
 bool cueEverStarted = false;
 unsigned long cueEndMs = 0;
+bool beeping = false;
+unsigned long beepEndMs = 0;
 unsigned long lastSampleMs = 0;
 bool piezoSeen = false;
 
@@ -107,9 +117,14 @@ void servoNeutral() {
 #endif
 }
 
+void buzzerOff() {
+  digitalWrite(BUZZER_PIN, LOW);
+  beeping = false;
+}
+
 void disarm(State next) {
   servoNeutral();
-  digitalWrite(BUZZER_PIN, LOW);
+  buzzerOff();
   state = next;
 }
 
@@ -242,6 +257,13 @@ void handleLine(char *text) {
       servo.write((int)angle);
     }
 #endif
+#if BUZZER_ENABLED
+    if (strcmp(fields[2], "SLIP") == 0 || strcmp(fields[2], "DAMAGE") == 0) {
+      digitalWrite(BUZZER_PIN, HIGH);
+      beeping = true;
+      beepEndMs = millis() + (duration < (long)BEEP_MS ? duration : BEEP_MS);
+    }
+#endif
     badPackets = 0;
     sendAck(seq);
     return;
@@ -283,8 +305,12 @@ void updateTimers() {
     disarm(FAULT);
     latched = true;
   }
+  if (beeping && (long)(millis() - beepEndMs) >= 0) {
+    buzzerOff();
+  }
   if (state == CUE_ACTIVE && (long)(millis() - cueEndMs) >= 0) {
     servoNeutral();
+    buzzerOff();
     state = ARMED_IDLE;
   }
 }

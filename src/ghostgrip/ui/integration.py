@@ -12,8 +12,10 @@ quality, one cue per event, cooldown, angle clamp) and then the firmware's own c
 (arming, angle window, cooldown, 500 ms watchdog). The board is never armed automatically:
 only the operator's H key arms it. Tracking lost for TRACKING_LOSS_STOP_MS sends STOP.
 """
+from collections import Counter
 import dataclasses
 from dataclasses import dataclass
+import math
 import time
 from typing import List, Optional
 
@@ -40,6 +42,125 @@ def lost_hand(t_ms: int, last: Optional[HandState]) -> HandState:
     xy = last.pointer_xy if last is not None else (0.5, 0.5)
     q = last.closure_q if last is not None else 0.0
     return HandState(t_ms, xy, q, 0.0, (0.0, 0.0), 0.0, False, 0.0)
+
+
+# ====================================================================== Member A input guard
+class CameraStabilizer:
+    """Stops bad camera frames from reaching the physics (camera input only).
+
+    Found in a logged live session: after a one-frame tracking dropout the next frame often put
+    the hand 30% of the screen away (MediaPipe can also jump to another person's hand) or
+    reported a nonsense closure (0.00 or 1.00), which dropped a held sponge mid-air; and a hand
+    turned with its fingers toward the camera collapses on screen, making closure and pointer
+    meaningless. This guard:
+      * holds the last good pointer and closure through unreliable frames (quality below the
+        simulation's 0.5, palm collapsed to < 60% of its usual size, or hand edge-on) and
+        reports them as unreliable, so no new grasp, cue or release can come from them;
+      * accepts a sudden big jump of the pointer or closure only once it persists for
+        CONFIRM_FRAMES consistent frames (a real move), never from a single frame;
+      * limits how fast the closure may change (a real full pinch still takes 0.15 s);
+      * reports tracking lost after HOLD_MAX_MS of held frames, so the world releases safely.
+    Real tracking losses pass straight through. Nothing here invents a confident measurement.
+    """
+
+    MAX_JUMP = 0.15            # world fraction in one frame; more is a mis-detection unless it persists
+    MAX_Q_JUMP = 0.35          # closure change in one frame; more is a spike unless it persists
+    CONFIRM_FRAMES = 3
+    CONSISTENT_XY = 0.06
+    CONSISTENT_Q = 0.12
+    MAX_Q_RATE = 4.0           # closure units per second
+    HOLD_MAX_MS = 600
+    HELD_QUALITY = 0.3         # reported for held frames: below the simulation's QUALITY_MIN
+    FORESHORTENED = 0.6        # palm smaller than this share of its usual on-screen size
+    EDGE_ON = 0.35             # palm width / palm length below this: hand turned sideways
+    QUALITY_MIN = 0.5
+
+    def __init__(self):
+        self.last: Optional[HandState] = None
+        self.palm_typ: Optional[float] = None
+        self.counts: Counter = Counter()
+        self._candidates: List[HandState] = []
+        self._held_since: Optional[int] = None
+
+    # ------------------------------------------------------------------ main entry
+    def filter(self, hand: HandState, points_px=None) -> HandState:
+        if not hand.tracking_ok:
+            self._candidates = []
+            self._held_since = None
+            return hand                                   # real loss: the world freezes, then releases
+        problem = self._quality_problem(hand, points_px)
+        if problem is None and self.last is not None:
+            problem = self._jump_problem(hand)
+        if problem is not None:
+            self.counts[problem] += 1
+            return self._hold(hand)
+        return self._accept(hand, points_px, slew=True)
+
+    def summary(self) -> str:
+        if not self.counts:
+            return "no frames needed holding"
+        names = {"low_quality": "low quality", "foreshortened": "fingers toward camera",
+                 "edge_on": "hand sideways", "teleport": "position jumps", "q_spike": "grip spikes"}
+        return ", ".join(f"{n} {names.get(k, k)}" for k, n in self.counts.most_common())
+
+    # ------------------------------------------------------------------ checks
+    def _quality_problem(self, hand: HandState, points_px) -> Optional[str]:
+        if not (math.isfinite(hand.tracking_quality) and hand.tracking_quality >= self.QUALITY_MIN):
+            return "low_quality"
+        if points_px is not None and len(points_px) == 21:
+            from ghostgrip.ui.hand_3d import _palm_size
+            palm = _palm_size(points_px)
+            length = math.dist(points_px[0], points_px[9])
+            width = math.dist(points_px[5], points_px[17])
+            if self.palm_typ is not None and palm < self.FORESHORTENED * self.palm_typ:
+                return "foreshortened"
+            if length > 1e-6 and width / length < self.EDGE_ON:
+                return "edge_on"
+        return None
+
+    def _jump_problem(self, hand: HandState) -> Optional[str]:
+        jump = math.dist(hand.pointer_xy, self.last.pointer_xy)
+        q_jump = abs(hand.closure_q - self.last.closure_q)
+        if jump <= self.MAX_JUMP and q_jump <= self.MAX_Q_JUMP:
+            self._candidates = []
+            return None
+        # a big change counts only once it repeats consistently (a real move, not one bad frame)
+        prev = self._candidates[-1] if self._candidates else None
+        if prev is not None and (math.dist(hand.pointer_xy, prev.pointer_xy) <= self.CONSISTENT_XY
+                                 and abs(hand.closure_q - prev.closure_q) <= self.CONSISTENT_Q):
+            self._candidates.append(hand)
+        else:
+            self._candidates = [hand]
+        if len(self._candidates) >= self.CONFIRM_FRAMES:
+            self._candidates = []
+            return None
+        return "teleport" if jump > self.MAX_JUMP else "q_spike"
+
+    # ------------------------------------------------------------------ outputs
+    def _accept(self, hand: HandState, points_px, slew: bool) -> HandState:
+        out = hand
+        if slew and self.last is not None:
+            dt = max(0.0, (hand.t_ms - self.last.t_ms) / 1000.0)
+            step = self.MAX_Q_RATE * dt
+            q = self.last.closure_q + max(-step, min(step, hand.closure_q - self.last.closure_q))
+            out = dataclasses.replace(hand, closure_q=q)
+        if points_px is not None and len(points_px) == 21:
+            from ghostgrip.ui.hand_3d import _palm_size
+            palm = _palm_size(points_px)
+            self.palm_typ = palm if self.palm_typ is None else self.palm_typ + 0.05 * (palm - self.palm_typ)
+        self.last = out
+        self._held_since = None
+        return out
+
+    def _hold(self, hand: HandState) -> HandState:
+        if self.last is None:                             # nothing good seen yet: just mark it
+            return dataclasses.replace(hand, tracking_quality=min(hand.tracking_quality, self.HELD_QUALITY))
+        if self._held_since is None:
+            self._held_since = hand.t_ms
+        if hand.t_ms - self._held_since > self.HOLD_MAX_MS:
+            return lost_hand(hand.t_ms, self.last)         # garbage for too long: treat as lost
+        return dataclasses.replace(self.last, t_ms=hand.t_ms, dq_dt=0.0, velocity_xy=(0.0, 0.0),
+                                   tracking_quality=min(hand.tracking_quality, self.HELD_QUALITY))
 
 
 # ====================================================================== Member D

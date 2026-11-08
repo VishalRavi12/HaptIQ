@@ -19,8 +19,13 @@ Events (exactly one per transition, never per frame):
 Anti-chatter rules (test cases T03, T07):
     - a new phase must be wanted for CONFIRM_STEPS consecutive physics steps;
     - contact/release and hold/slip use hysteresis margins;
-    - after any engagement ends, the hand must open (q < OPEN_Q) before it can
-      grab again, and pinching in empty air disarms grabbing (no "sticky grab").
+    - a grab needs a deliberate closing: either the hand was open (q < REARM_Q) since
+      the last engagement, or it closes by CLOSE_GESTURE_Q within CLOSE_WINDOW_MS while
+      over the object. Real hands roam half-closed, so "open first" alone locked them
+      out; a pinch held shut while sliding onto an object still never grabs (no
+      "sticky grab"), and pinching in empty air still disarms the open-hand route;
+    - a fragile object breaks only when over-gripped for OVERGRIP_HOLD_MS, so a
+      one-frame spike in the measured closure does not shatter it.
 
 Timing: fixed 1/60 s physics steps with capped catch-up, so the outcome does
 not depend on the display frame rate.
@@ -51,7 +56,15 @@ Q_HYST = 0.05                       # release only below contact_threshold - Q_H
 G_HYST = 0.03                       # keep holding until effort < hold - G_HYST
 GRAB_MARGIN = 14.0                  # px beyond the radius where pads can engage
 EXIT_EXTRA = 16.0                   # extra px before a resting contact is released
-OPEN_Q = 0.15                       # hand counts as "open" below this
+OPEN_Q = 0.15                       # hand counts as fully open below this (also Member D's intent)
+REARM_Q = 0.25                      # open enough to grab again / start a trial. Real camera hands
+                                    # often read 0.20-0.24 when fully open, so 0.15 locked them out.
+                                    # Stays below every "closed" level (glass releases at 0.25,
+                                    # air pinch at 0.30), so a closed hand still cannot re-grab.
+OVERGRIP_HOLD_MS = 200.0            # a fragile object breaks only after this long over its limit
+CLOSE_GESTURE_Q = 0.12              # closing this much ...
+CLOSE_WINDOW_MS = 500.0             # ... within this long, over an object, is a deliberate grab
+                                    # (the shared q_jitter trace only wobbles by 0.07)
 AIR_PINCH_Q = 0.30                  # pinching this much in empty air disarms grabbing
 RELEASE_INTENT_RATE = 0.4           # q falling faster than this per second = deliberate
                                     # release, so passing through the weak band is not a SLIP
@@ -181,6 +194,8 @@ class World:
         self._acc = 0.0
         self._lost_ms = 0.0
         self._armed = False
+        self._overgrip_ms = 0.0
+        self._q_hist: Deque[Tuple[int, float]] = deque()   # (t_ms, q) of recent reliable frames
         self._engaged: Optional[ObjectState] = None
         self._phase = NO_CONTACT
         self._effort = 0.0
@@ -256,6 +271,13 @@ class World:
                 self.q = q
         else:
             self.q_rate = 0.0
+        # recent closure of reliable frames, for the "closing on the object" grab rule
+        if self.reliable:
+            self._q_hist.append((self.t_ms, self.q))
+            while self._q_hist and self._q_hist[0][0] < self.t_ms - CLOSE_WINDOW_MS:
+                self._q_hist.popleft()
+        else:
+            self._q_hist.clear()
         self._acc = min(self._acc + elapsed_s, MAX_CATCHUP_STEPS * DT)
         while self._acc >= DT - 1e-9:
             self._acc -= DT
@@ -272,7 +294,7 @@ class World:
                 self._end_engagement(RELEASE, "tracking_lost")
             self._pending = None
             return
-        if self.q < OPEN_Q:
+        if self.q < REARM_Q:
             self._armed = True
         if self._engaged is None:
             self._try_engage()
@@ -308,6 +330,13 @@ class World:
                 best, best_d = o, d
         return best
 
+    def _closing_on_object(self) -> bool:
+        """The hand is closing deliberately right now: q rose by CLOSE_GESTURE_Q or more within
+        the last CLOSE_WINDOW_MS of reliable tracking. A pinch held shut does not count."""
+        if not self._q_hist:
+            return False
+        return self.q - min(q for _, q in self._q_hist) >= CLOSE_GESTURE_Q
+
     def _try_engage(self) -> None:
         o = self._nearest_overlapping()
         if o is None:
@@ -315,7 +344,8 @@ class World:
                 self._armed = False      # pinched in empty air: no sticky grab
             self._pending = None
             return
-        if not self._armed or not self.reliable or self.q < o.profile.contact_threshold:
+        if not (self._armed or self._closing_on_object()) or not self.reliable \
+                or self.q < o.profile.contact_threshold:
             self._pending = None
             return
         if self._confirm(("ENGAGE", o.object_id)):
@@ -330,7 +360,8 @@ class World:
 
     def _desired_phase(self, o: ObjectState, g: float) -> str:
         p = o.profile
-        if p.break_threshold is not None and g > p.break_threshold:
+        if (p.break_threshold is not None and g > p.break_threshold
+                and self._overgrip_ms >= OVERGRIP_HOLD_MS):
             return DAMAGED
         if self.q < p.contact_threshold - Q_HYST:
             return _RELEASED
@@ -349,6 +380,8 @@ class World:
         o = self._engaged
         g = o.profile.effort(self.q)
         self._effort = g
+        over = o.profile.break_threshold is not None and g > o.profile.break_threshold
+        self._overgrip_ms = self._overgrip_ms + DT * 1000.0 if over else 0.0
         desired = self._desired_phase(o, g)
         if desired != self._phase:
             if self._confirm(("PHASE", desired)):
@@ -385,7 +418,9 @@ class World:
         self._engaged = None
         self._phase = NO_CONTACT
         self._effort = 0.0
-        self._armed = False              # hand must open before the next grab
+        self._armed = False              # hand must open (or close again) before the next grab
+        self._overgrip_ms = 0.0
+        self._q_hist.clear()             # a new grab needs a new closing movement
         self._pending = None
 
     def _clamp_to_world(self, o: ObjectState) -> None:

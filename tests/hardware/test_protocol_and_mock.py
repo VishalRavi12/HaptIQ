@@ -209,5 +209,75 @@ class TestReviewFindings(unittest.TestCase):
         self.assertEqual(self.send(b'\n\r\n'), [])
 
 
+class TestBuzzer(unittest.TestCase):
+    """C7: a short beep on accepted SLIP/DAMAGE cues, silenced by expiry, STOP, button and watchdog."""
+
+    def setUp(self):
+        self.clock = FakeClock()
+        self.board = MockArduino(clock_ms=self.clock)
+        drain(self.board)
+
+    def send(self, text):
+        self.board.write((text + '\n').encode())
+        return drain(self.board)
+
+    def armed_beep(self, event='SLIP'):
+        self.send('ARM,1')
+        self.assertIsInstance(self.send(f'CUE,2,{event},90,300')[0], Ack)
+
+    def test_slip_and_damage_beep_then_expire(self):
+        for event in ('SLIP', 'DAMAGE'):
+            self.setUp()
+            self.armed_beep(event)
+            self.assertTrue(self.board.buzzer_on, event)
+            self.clock.ms += 120
+            self.board.tick()
+            self.assertFalse(self.board.buzzer_on, event)
+
+    def test_beep_never_outlasts_a_short_cue(self):
+        self.send('ARM,1')
+        self.send('CUE,2,DAMAGE,90,50')
+        self.clock.ms += 50
+        self.board.tick()
+        self.assertFalse(self.board.buzzer_on)
+
+    def test_contact_and_hold_do_not_beep(self):
+        self.send('ARM,1')
+        self.send('CUE,2,CONTACT,85,100')
+        self.assertFalse(self.board.buzzer_on)
+        self.clock.ms += 600
+        self.send('KA,3')
+        self.send('CUE,4,STABLE_HOLD,90,100')
+        self.assertFalse(self.board.buzzer_on)
+
+    def test_disarmed_board_never_beeps(self):
+        self.assertEqual(self.send('CUE,1,SLIP,90,300'), [Err(1, 'NOT_ARMED')])
+        self.assertFalse(self.board.buzzer_on)
+
+    def test_stop_button_and_watchdog_silence_it(self):
+        self.armed_beep()
+        self.send('STOP,3')
+        self.assertFalse(self.board.buzzer_on)
+
+        self.setUp()
+        self.armed_beep()
+        self.board.press_button()
+        self.assertFalse(self.board.buzzer_on)
+
+        self.setUp()
+        self.board.write(b'ARM,1\n')
+        self.board.write(b'CUE,2,SLIP,90,500\n')
+        drain(self.board)
+        self.clock.ms += 100   # still beeping: the beep is capped at 120 ms
+        self.board.tick()
+        self.assertTrue(self.board.buzzer_on)
+        self.board.beep_end_ms = 10_000    # pretend a long beep, so only the watchdog can end it
+        self.board.cue_end_ms = 10_000
+        self.clock.ms += 501
+        self.board.tick()
+        self.assertEqual(self.board.state, 'FAULT')
+        self.assertFalse(self.board.buzzer_on)
+
+
 if __name__ == '__main__':
     unittest.main()

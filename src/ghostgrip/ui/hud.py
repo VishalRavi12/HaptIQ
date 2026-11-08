@@ -35,7 +35,7 @@ class HudInfo:
 
 HELP = [
     "Mouse: move   Left/W close   Right/S open",
-    "Wheel grip  Space open  G ghost  F9 rec",
+    "Wheel grip  Space open  G ghost  Tab 3D/2D",
     "1/2/3/0: glass/sponge/block/all  N: next",
     "F1-F4: condition A-D   [ ]: manual assist",
     "T/L/J: lose tracking/low quality/jitter",
