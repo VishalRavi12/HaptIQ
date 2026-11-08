@@ -43,4 +43,4 @@ Member C added two rules on top of plan section 6.3, after code review found rea
 - After the STOP button, a watchdog timeout or repeated bad packets the board is **latched**:
   `ARM` replies `ERR,seq,LATCHED` until the host sends `STOP` first.
 - `STOP` is always obeyed, even with a stale or unreadable sequence number.
-- Only `CONTACT` cues move the servo; `STABLE_HOLD`, `SLIP` and `DAMAGE` are lights only.
+- Only `CONTACT` cues move the servo; `HOLD` (sent to the board as `STABLE_HOLD`), `SLIP` and `DAMAGE` are lights only; `RELEASE` has no cue.

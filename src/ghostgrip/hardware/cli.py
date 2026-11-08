@@ -5,7 +5,7 @@
   python -m ghostgrip.hardware.cli stop
   python -m ghostgrip.hardware.cli monitor 10         # print sensor packets for 10 s
 
-Run from the repo root with PYTHONPATH=src.
+Run from the repo root with PYTHONPATH=src (the root holds the shared contracts.py).
 """
 import argparse
 import time
@@ -65,7 +65,7 @@ def main(argv=None):
     parser.add_argument('--mock', action='store_true', help='use the fake board instead of hardware')
     sub = parser.add_subparsers(dest='command', required=True)
     cue = sub.add_parser('cue', help='arm, send one cue, then disarm')
-    cue.add_argument('kind', choices=['CONTACT', 'STABLE_HOLD', 'SLIP', 'DAMAGE'])
+    cue.add_argument('kind', choices=['CONTACT', 'HOLD', 'SLIP', 'DAMAGE'])
     sub.add_parser('stop', help='disarm immediately')
     monitor = sub.add_parser('monitor', help='print sensor packets')
     monitor.add_argument('seconds', type=float, nargs='?', default=10)

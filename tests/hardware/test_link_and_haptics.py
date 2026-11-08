@@ -176,5 +176,34 @@ class TestLinkReviewFindings(unittest.TestCase):
         self.assertEqual(policy.filter(1, 'CONTACT', float('nan'), True).reason, 'LOW_CONFIDENCE')
 
 
+class TestSharedContracts(unittest.TestCase):
+    def test_uses_the_shared_frozen_types(self):
+        import contracts
+        from ghostgrip.hardware import protocol
+        self.assertIs(protocol.CueEvent, contracts.CueEvent)
+        self.assertIs(protocol.DeviceState, contracts.DeviceState)
+
+    def test_cue_keeps_the_callers_object_unchanged(self):
+        link = SerialLink(MockArduino())
+        link.arm()
+        cue = HapticPolicy().filter(1, 'CONTACT', 0.9, True).cue
+        self.assertIsInstance(link.cue(cue), Ack)
+        self.assertEqual(cue.seq, 0)
+
+    def test_simulation_hold_becomes_firmware_stable_hold(self):
+        link = SerialLink(MockArduino())
+        link.arm()
+        decision = HapticPolicy().filter(1, 'HOLD', 0.9, True)
+        self.assertEqual(decision.cue.kind, 'STABLE_HOLD')
+        self.assertIsInstance(link.cue(decision.cue), Ack)
+
+    def test_every_simulation_kind_is_handled(self):
+        import contracts
+        for kind in contracts.SIM_EVENT_KINDS:
+            decision = HapticPolicy().filter(1, kind, 0.9, True)
+            expected = 'suppressed' if kind == contracts.RELEASE else 'cue'
+            self.assertEqual(decision.action, expected, kind)
+
+
 if __name__ == '__main__':
     unittest.main()

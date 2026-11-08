@@ -3,35 +3,13 @@
 Member C addition to the plan's protocol: KA,seq is a keepalive that refreshes the board
 watchdog but cannot arm it, so a stopped board is never re-armed by accident.
 
-CueEvent and DeviceState follow the frozen contracts in plan section 6.1. They live here
-until the shared contracts.py v1 lands; then import them from there instead.
+CueEvent and DeviceState are the shared, frozen types from the repository-root contracts.py.
 """
 from dataclasses import dataclass
-from typing import Optional
+
+from contracts import CueEvent, DeviceState  # noqa: F401  (re-exported for the hardware package)
 
 BAUD = 115200
-
-
-@dataclass
-class CueEvent:
-    seq: int
-    kind: str              # CONTACT, STABLE_HOLD, SLIP, DAMAGE
-    safe_angle_deg: int
-    duration_ms: int
-    no_contact_mode: bool = True
-
-
-@dataclass
-class DeviceState:
-    uptime_ms: int
-    armed: bool
-    touch: bool
-    piezo: bool
-    ax_g: Optional[float]   # None means the accelerometer is absent, never zero
-    ay_g: Optional[float]
-    az_g: Optional[float]
-    rotary_raw: int
-    last_ack_seq: int = -1
 
 
 @dataclass
@@ -88,7 +66,8 @@ def parse_line(raw):
                 uptime_ms=int(fields[1]),
                 ax_g=_accel(fields[2]), ay_g=_accel(fields[3]), az_g=_accel(fields[4]),
                 piezo=fields[5] == '1', touch=fields[6] == '1',
-                rotary_raw=int(fields[7]), armed=fields[8] == '1')
+                rotary_raw=int(fields[7]), armed=fields[8] == '1',
+                last_ack_seq=None)  # filled in by SerialLink, which knows the ACKs
         if fields[0] == 'READY':
             return Ready(','.join(fields[1:]))
     except ValueError:

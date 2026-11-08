@@ -3,6 +3,7 @@
 A missing board, a dropped ACK or a pulled cable never raises into the simulation. The link
 reports connected=False and the app keeps running laptop-only (plan: NFR-01 graceful failure).
 """
+import dataclasses
 import time
 
 from .protocol import (BAUD, Ack, CueEvent, DeviceState, Err, Ready, encode_arm,
@@ -74,7 +75,7 @@ class SerialLink:
 
     def _handle(self, message):
         if isinstance(message, DeviceState):
-            message.last_ack_seq = self.last_ack_seq
+            message = dataclasses.replace(message, last_ack_seq=self.last_ack_seq)  # contracts are frozen
             self.device = message
             self.armed = message.armed
         elif isinstance(message, Err):
@@ -141,8 +142,7 @@ class SerialLink:
     def cue(self, cue: CueEvent):
         """Send one cue. Never retried: a lost ACK must not make the same cue play twice."""
         def payload(seq):
-            cue.seq = seq
-            return encode_cue(cue)
+            return encode_cue(dataclasses.replace(cue, seq=seq))
         return self._send(payload, retries=0)
 
     def close(self):

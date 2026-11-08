@@ -29,7 +29,9 @@ LED_ONLY_ANGLE = 90
 
 # Event -> does it move the servo? Everything else is LED/buzzer only on the board.
 SERVO_EVENTS = {'CONTACT'}
-CUE_EVENTS = {'CONTACT', 'STABLE_HOLD', 'SLIP', 'DAMAGE'}
+# Simulation event kind (contracts.SIM_EVENT_KINDS) -> event name the firmware understands.
+# RELEASE has no cue.
+CUE_EVENTS = {'CONTACT': 'CONTACT', 'HOLD': 'STABLE_HOLD', 'SLIP': 'SLIP', 'DAMAGE': 'DAMAGE'}
 STOP_EVENTS = {'TRACKING_LOST', 'STOP'}
 
 
@@ -89,7 +91,7 @@ class HapticPolicy:
 
         self.last_cue_ms = now
         self.cued_event_ids.add(event_id)
-        cue = CueEvent(seq=0, kind=kind, safe_angle_deg=self._angle_for(kind),
+        cue = CueEvent(seq=0, kind=CUE_EVENTS[kind], safe_angle_deg=self._angle_for(kind),
                        duration_ms=self.config['cue_duration_ms'],
                        no_contact_mode=not self.config['servo_enabled'])
         return Decision('cue', 'OK', cue)
