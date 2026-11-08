@@ -9,16 +9,22 @@ import time
 from .protocol import (BAUD, Ack, CueEvent, DeviceState, Err, Ready, encode_arm,
                        encode_cue, encode_keepalive, encode_stop, parse_line)
 
-PORT_HINTS = ('usbserial', 'usbmodem', 'ttyACM', 'ttyUSB', 'COM')
+PORT_HINTS = ('usbserial', 'usbmodem', 'ttyACM', 'ttyUSB', 'COM')   # most Arduino-like first
+# Raspberry Pi USB vendor ID. A Pico used as a 5V power adapter also shows up as a usbmodem
+# port and must never be mistaken for the Metro.
+IGNORED_VIDS = {0x2E8A}
 POLL_BUDGET_S = 0.02
 
 
-def find_port():
-    """Return the first port that looks like an Arduino, or None."""
-    from serial.tools import list_ports
-    for port in list_ports.comports():
-        if any(hint in port.device for hint in PORT_HINTS):
-            return port.device
+def find_port(ports=None):
+    """Return the port that looks most like the Arduino, or None."""
+    if ports is None:
+        from serial.tools import list_ports
+        ports = list_ports.comports()
+    for hint in PORT_HINTS:
+        for port in ports:
+            if hint in port.device and port.vid not in IGNORED_VIDS:
+                return port.device
     return None
 
 
