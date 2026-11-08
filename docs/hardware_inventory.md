@@ -31,7 +31,7 @@ Last updated: 2026-11-07. Only observed facts; nothing here is a measured perfor
 - [x] Emergency stop button tested mid-cue (2026-11-08): pressed during continuous 80/100 degree swings, board disarmed, then ARM refused LATCHED and CUE refused until STOP
 - [x] Watchdog, STOP, latch and command rejection tested on the real Metro (LED path, 2026-11-07)
 - [ ] Neutral state tested with the servo attached
-- [ ] 10 repeated cycles without heat or noise (10 cycles / 20 moves all acknowledged 2026-11-08; heat and noise check by hand pending)
+- [x] 10 repeated cycles without heat or noise (2026-11-08: 20/20 moves acknowledged; case cool and quiet by touch afterwards)
 - [ ] Second team member observes first trial
 
 No human contact with the servo until every box is checked.
