@@ -38,7 +38,7 @@ first and then the rest of the command.
 
 | What | Command | Needs |
 |---|---|---|
-| Simulation, mouse control | `python src/ghostgrip/ui/app.py` (`--scene sandbox`, `--condition B`) | nothing else |
+| Simulation, mouse control | `python src/ghostgrip/ui/app.py` (`--scene sandbox`, `--condition B`, `--assist-gain 0.5`, `--no-log`) | nothing else |
 | Simulation, replay a recording | `python src/ghostgrip/ui/app.py --replay data/synthetic/clean.csv` | nothing else |
 | Settings check | `PYTHONPATH=src python -m ghostgrip.config` | nothing else |
 | Synthetic hand traces | `PYTHONPATH=src python -m ghostgrip.ai.synthetic` | nothing else |
@@ -48,6 +48,7 @@ first and then the rest of the command.
 | Arduino with a fake board | `PYTHONPATH=src python -m ghostgrip.hardware.cli --mock cue CONTACT` | nothing else |
 | Hand model download (once) | `python download_hand_model.py` | internet |
 | Calibrate, then live hand preview | `python vision_preview.py --calibrate`, then `python vision_preview.py` | camera, hand model |
+| Live hand states without a window (add `--record` to save numbers, never images) | `PYTHONPATH=src python -m ghostgrip.vision.cli --frames 150` | camera, hand model |
 | Real Arduino | `PYTHONPATH=src python -m ghostgrip.hardware.cli cue CONTACT` | the board, USB data cable |
 
 Results from `ghostgrip.metrics.report` are labelled **synthetic** and are a pipeline check, not an experiment.
@@ -57,12 +58,12 @@ Add `--csv summary.csv` or `--plot success.png` to export them.
 
 | Area | State |
 |---|---|
-| Perception: landmarks to calibrated `HandStateV2`, trace recording | Built and tested. One 20 s live run was measured by its author (about 29.6 FPS, 4.5 ms inference); see `docs/perception_notes.md`. |
-| Simulation: glass, sponge and block, trials, replay, 2D UI | Built and tested (`tests/simulation`). The window has been looked at by its author only. |
-| Hardware: firmware, serial link, safety policy, mock board | Built and tested with the mock. The LED path was tried on a real board. The **servo is unpowered and the stop button is not connected**: no servo has moved and none should touch a person until `docs/hardware_inventory.md` is fully checked. |
+| Perception: landmarks to calibrated `HandStateV2`, a reusable camera source, trace recording | Built and tested. The live numbers (about 29.6 FPS, 4.5 ms inference) were measured by its author before the camera source was refactored; re-checking the refactored preview with a real camera is still listed as open in `docs/perception_notes.md`. |
+| Simulation: glass, sponge and block, trials, replay, 2D UI | Built and tested (`tests/simulation`, including every shared synthetic trace replayed at three frame rates). Each finished trial is appended to `data/local/trials_<session>.csv`. The window has been looked at by its author only. |
+| Hardware: firmware, serial link, safety policy, mock board | Built and tested with the mock. Its author reports (2026-11-08) that the stop button and the servo were tried on a real board, **unloaded and inside an 80-100 degree window**: 17 of 17 button presses disarmed it, and stop worked mid-cue. Three items are still open in `docs/hardware_inventory.md`: the servo's supply voltage has **not been measured** (5 V is assumed), its neutral position has not been checked on its mount, and a second person has not watched a first trial. **No servo should touch a person until all three are done.** |
 | AI core: predictor, grasp intent, bounded adaptation | Built and tested on **synthetic traces only**. The predictor beats the baselines while the hand moves and loses for a parked, jittery hand. |
 | Settings, CI, logging and results, preflight | Built and tested. |
-| Everything running together on a live camera | **Not done.** `ui/app.py` still uses a stand-in predictor and a fixed assistance gain; wiring in the real ones is the next step. |
+| Everything running together on a live camera | **Not done.** `ui/app.py` still uses a stand-in predictor and a hand-set assistance gain, and nothing in the app sends the hardware keepalive yet; wiring in the real predictor, intent, adaptation, logger and hardware is the next step. |
 | Real-user data and the four-condition comparison | **Not done.** Nothing here supports a claim about real people. |
 
 The four conditions are A baseline, B AI only, C haptic only, D AI and haptic.
@@ -73,15 +74,15 @@ The four conditions are A baseline, B AI only, C haptic only, D AI and haptic.
 contracts.py                  shared data types (change only with all four approvals)
 config.yaml                   every setting, one place; checked by src/ghostgrip/config.py
 src/ghostgrip/
-  vision/  ai/features.py  ai/calibration.py      perception: camera landmarks to HandStateV2
+  vision/  ai/features.py  ai/calibration.py      perception: camera source, landmarks to HandStateV2
   ai/synthetic.py  predict.py  intent.py  adapt.py   fake traces, Kalman predictor, grasp states, assistance
   simulation/  ui/                                 virtual objects, trials, replay, Pygame window
   hardware/                                        serial link, safety policy, mock Arduino, CLI
   metrics/                                         session logging, results, plots, synthetic pipeline run
   preflight.py                                     the laptop check
-firmware/ghostgrip_uno/       Arduino firmware (boots disarmed; servo off until verified)
+firmware/ghostgrip_uno/       Arduino firmware (boots disarmed; servo limited to 80-100 degrees; its checklist is still open)
 sim/wokwi/                    browser simulation of the board
-data/synthetic/               fake hand traces (safe to share)       data/local/   real recordings, never committed
+data/synthetic/               fake hand traces (safe to share)       data/local/   real recordings and logs, never committed
 docs/                         perception notes, hardware inventory and safety checklist
 tests/                        one folder per area            scripts/   preflight launcher
 main.py simulation.py grasp_ai.py hand_tracking.py ...      the original beginner starter, kept for reference
@@ -104,10 +105,12 @@ is `real` or `synthetic`, and the two are never added together in a results tabl
 
 ## Safety
 
-The servo is off in `config.yaml` and in the firmware. Do not connect the kit's 12 V adapter to it, and do not
-attach it to a finger, until the checklist in `docs/hardware_inventory.md` is complete. The board boots
-disarmed, a 500 ms watchdog disarms it if the laptop goes quiet, and `STOP` always wins. A light cue is a
-valid final output.
+The servo is **off in `config.yaml`**, so the app currently sends only neutral-angle cues. The firmware has the
+servo enabled but limited to an 80-100 degree window, and its stop button always wins. Do not connect the kit's
+12 V adapter to the servo, and do not attach the servo to a person, until the whole checklist in
+`docs/hardware_inventory.md` is complete (supply voltage measured, neutral position checked on its mount, a
+second person watching the first trial). The board boots disarmed, and a 500 ms watchdog disarms it if the
+laptop goes quiet. A light cue is a valid final output.
 
 ## Troubleshooting
 
