@@ -7,12 +7,23 @@ Owner: Member B. Folders: `src/ghostgrip/simulation/`, `src/ghostgrip/ui/`, `tes
 
 ```
 .venv\Scripts\python.exe src\ghostgrip\ui\app.py                     # mouse, glass trial
+.venv\Scripts\python.exe src\ghostgrip\ui\app.py --camera            # live hand (Member A)
+.venv\Scripts\python.exe src\ghostgrip\ui\app.py --camera --hardware COM4 --condition C
+.venv\Scripts\python.exe src\ghostgrip\ui\app.py --replay clean --hardware mock --condition D
 .venv\Scripts\python.exe src\ghostgrip\ui\app.py --scene sandbox     # all three objects
-.venv\Scripts\python.exe src\ghostgrip\ui\app.py --condition B --assist-gain 0.5
-.venv\Scripts\python.exe src\ghostgrip\ui\app.py --replay clean      # a shared trace in data/synthetic/
 .venv\Scripts\python.exe src\ghostgrip\ui\app.py --replay data\local\trace_XXXX.csv
 .venv\Scripts\python.exe -m pytest tests/simulation -v               # Member B tests (CI uses pytest)
 ```
+
+Integrated loop (`ui/integration.py`, Phase 2): every frame the hand (camera, mouse or replay)
+goes through Member D's `KalmanPredictor` (ghost marker), `AssistPolicy` (assistance gain in
+conditions B/D; `--assist-gain` or `[` `]` override it) and `IntentMachine` (HUD), then the
+World. In conditions C/D each event goes through Member C's `HapticPolicy` and `SerialLink`.
+The board is armed only with **H**; **X** sends STOP; tracking lost for 300 ms sends STOP;
+quitting sends STOP. While `config.yaml` has `servo_enabled: false`, CONTACT is sent at the
+90 degree neutral, so only the LED shows the cue. Sessions are logged with Member D's
+`SessionLogger` in `data/local/sessions/<session-id>/` (origin `real` for the camera,
+`synthetic` for mouse and shared traces). Calibrate once first: `python vision_preview.py --calibrate`.
 
 Shared trace names for `--replay`: `clean`, `noisy`, `dropout_short`, `dropout_long`,
 `glitch`, `fast_reach`, `slow_close`, `low_quality`, `frame_drops`, `q_jitter`.
@@ -117,10 +128,10 @@ world.event_reason(event.event_id)           # e.g. "overgrip", "dropped", "trac
 | sponge | 0.20 | ~0.39 | never (squashes) |
 | block | 0.35 | 0.85 | never (slips below hold) |
 
-## Stand-ins to replace in Phase 2
+## Stand-ins replaced in Phase 2 (ui/integration.py)
 
-- `ui/app.py: stub_prediction()` -> Member D's `predict.py` (`Prediction`).
-- `ui/app.py: --assist-gain` / `[` `]` keys -> Member D's `adapt.assist_gain`.
-- `MouseKeyboardAdapter` -> Member A's live `HandStateV2` source.
-- Console prints of events -> Member C's `haptics.py`.
-- `trial.append_outcome_csv` -> Member D's logger.
+- Ghost marker: Member D's `KalmanPredictor` (was a constant-velocity stub).
+- Assistance gain: Member D's `AssistPolicy` (`--assist-gain` / `[` `]` remain as a manual override).
+- Hand input: Member A's `LiveHandSource` with `--camera` (mouse stays the default).
+- Events: Member C's `HapticPolicy` + `SerialLink` with `--hardware` (conditions C and D).
+- Trial log: Member D's `SessionLogger` (`trial.append_outcome_csv` is kept for its tests).

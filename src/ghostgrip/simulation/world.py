@@ -151,6 +151,10 @@ SCENES = {
 
 class World:
     def __init__(self, scene: str = "glass"):
+        # Event ids keep counting across reset(), so every event in a session has its own id.
+        # Member C's haptic policy sends at most one cue per id; restarting at 1 on every
+        # new trial would make it ignore every event of the second and later trials.
+        self._next_event_id = 1
         self.reset(scene)
 
     # ------------------------------------------------------------------ setup
@@ -185,7 +189,6 @@ class World:
         self._slip_off = 0.0
         self._pending: Optional[tuple] = None
         self._pending_n = 0
-        self._next_event_id = 1
         self._out: List[SimEvent] = []
         self._reasons: Dict[int, str] = {}
         self._recent: Deque[Tuple[int, str, str, str]] = deque(maxlen=6)
