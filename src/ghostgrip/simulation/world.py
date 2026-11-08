@@ -134,6 +134,7 @@ class WorldSnapshot:
     table_y: float
     assist_enabled: bool
     assist_gain: float
+    assist_active: bool             # enabled, gain > 0 and tracking reliable right now
     grab_radius_extra_frac: float
     recent_events: Tuple[Tuple[int, str, str, str], ...]   # (t_ms, kind, object, reason)
     slip_count: int
@@ -215,6 +216,13 @@ class World:
     @property
     def engaged_id(self) -> Optional[str]:
         return self._engaged.object_id if self._engaged else None
+
+    @property
+    def assist_active(self) -> bool:
+        """Assistance only helps while tracking is reliable (config.yaml
+        ai.low_confidence_behavior: disable_assist). New grasps are refused anyway
+        while unreliable, so this flag mainly tells the view and the logs."""
+        return self.assist_enabled and self.assist_gain > 0.0 and self.reliable
 
     def enter_radius(self, o: ObjectState) -> float:
         extra = o.profile.radius * MAX_ASSIST_FRAC * self.assist_gain if self.assist_enabled else 0.0
@@ -443,6 +451,9 @@ class World:
             phase=self._phase, effort=self._effort, objects=tuple(views),
             target_zone=TARGET_ZONE, table_y=TABLE_Y,
             assist_enabled=self.assist_enabled, assist_gain=self.assist_gain,
+            assist_active=self.assist_active,
+            # The configured enlargement of the grab zone (what enter_radius uses). Whether it
+            # is helping right now is assist_active (needs reliable tracking).
             grab_radius_extra_frac=MAX_ASSIST_FRAC * self.assist_gain if self.assist_enabled else 0.0,
             recent_events=tuple(self._recent),
             slip_count=self.slip_count, overgrip_count=self.overgrip_count)

@@ -111,7 +111,7 @@ class Renderer2D:
         color = PHASE_COLORS.get(snap.phase, TEXT)
         if not snap.tracking_ok:
             color = (130, 130, 140)
-        if snap.assist_enabled and snap.engaged_id is None:
+        if snap.assist_active and snap.engaged_id is None:
             pygame.draw.circle(surf, (120, 120, 200), (int(px), int(py)),
                                int(14 + 40 * snap.grab_radius_extra_frac), 1)
         half = snap.pad_gap / 2.0
