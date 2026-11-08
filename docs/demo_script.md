@@ -9,7 +9,7 @@ repository root; `python scripts/preflight.py` first tells you what is missing.
 - [ ] Recalibrate for whoever will be at the camera: `python vision_preview.py --calibrate`.
 - [ ] Close Zoom, Meet and Teams. Same lighting as your rehearsal. Camera view (key **V**) on, so the audience sees the hand.
 - [ ] Board plugged in, servo on its stand **away from anyone**, stop button within reach. Never attach it to a person.
-- [ ] `ai.freeze_adaptation: true` in `config.yaml` (the default).
+- [ ] This is a demo, not a measured run: do not present its numbers as results. (A measured run uses `--evaluation`.)
 - [ ] The fallback is ready: `python src/ghostgrip/ui/app.py --replay clean --hardware mock` works with no camera and no board.
 
 ## The run

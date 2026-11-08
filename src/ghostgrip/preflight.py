@@ -105,7 +105,7 @@ def run_checks(probes: Optional[Probes] = None, root: Path = REPO_ROOT, camera: 
         except ConfigError as error:
             return Check("config.yaml", FAIL, str(error))
         servo = "ON" if cfg.hardware.servo_enabled else "OFF"
-        learning = "frozen" if cfg.ai.freeze_adaptation else "LEARNING (practice mode)"
+        learning = "frozen" if cfg.ai.freeze_adaptation else "learns between trials (use --evaluation to freeze)"
         return Check("config.yaml", OK, f"valid; hardware {'enabled' if cfg.hardware.enabled else 'disabled'}; "
                                         f"servo {servo}; assist profile {learning}")
     checks.append(_safe("config.yaml", config, on_error=FAIL))

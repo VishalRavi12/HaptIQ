@@ -1,6 +1,7 @@
 """Tests for src/ghostgrip/metrics/protocol.py (the volunteer study plan). No camera needed."""
 import contextlib
 import io
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -72,7 +73,8 @@ class TestRunSheet(unittest.TestCase):
         text = P.run_sheet(plan)
         self.assertIn("practice (not analysed)", text)               # practice trials must never be analysed
         self.assertIn("--session-id P01_practice", text)
-        self.assertIn(f"--condition {plan.order[0]} --session-id P01", text)
+        self.assertIn(f"--condition {plan.order[0]} --evaluation --session-id P01", text)   # measured: frozen
+        self.assertNotIn("--evaluation --session-id P01_practice", text)                     # practice may learn
         for code in plan.order[1:]:
             self.assertIn(f"press {P.CONDITION_KEYS[code]}", text)
         for key in ("press 1 (glass)", "press 2 (sponge)", "press 3 (block)"):
@@ -97,8 +99,16 @@ class TestRunSheet(unittest.TestCase):
         self.assertEqual(text.count("then 3 trial(s)"), 12)           # 3 objects x 4 conditions
 
 
+GOOD_META = {"evaluation": True, "assist_profile_frozen": True, "manual_assist_gain": None,
+             "servo_enabled": False, "input": "camera", "origin": "real"}
+
+
+def write_meta(folder, run=0, **changes):
+    (Path(folder) / f"run_{run}_meta.json").write_text(json.dumps({**GOOD_META, **changes}))
+
+
 class TestAudit(unittest.TestCase):
-    def log_session(self, folder, plan, counts=None, order=None, extra_session=None):
+    def log_session(self, folder, plan, counts=None, order=None, extra_session=None, meta=True):
         counts = counts or {c: plan.trials_per_condition for c in plan.order}
         order = order or plan.order
         t, trial = 0, 0
@@ -109,6 +119,8 @@ class TestAudit(unittest.TestCase):
                     log.begin_trial(trial, code, t)
                     log.end_trial(TrialOutcome(plan.session_id, trial, code, True, "", t, t + 5000))
                     t += 6000
+        if meta:
+            write_meta(folder)
 
     def test_a_session_that_matches_the_plan_passes(self):
         plan = P.make_plans(1)[0]
@@ -143,6 +155,7 @@ class TestAudit(unittest.TestCase):
                             continue                                  # left open: logged as incomplete on close
                         reason = "tracking_lost" if k == 1 else ""
                         log.end_trial(TrialOutcome("P01", trial, code, not reason, reason, trial * 1000, trial * 1000 + 500))
+            write_meta(tmp)
             self.assertTrue(P.audit_session(tmp, plan).ok)
 
     def test_another_participants_trials_in_the_folder_are_flagged(self):
@@ -158,6 +171,52 @@ class TestAudit(unittest.TestCase):
         plan = P.make_plans(1)[0]
         with tempfile.TemporaryDirectory() as tmp:
             self.assertIn("no trials were logged", P.audit_session(tmp, plan).problems[0])
+
+
+class TestRunMetadataAudit(unittest.TestCase):
+    def problems(self, **changes):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_meta(tmp, **changes)
+            return P.audit_run_metadata(tmp)
+
+    def test_a_frozen_camera_run_with_the_servo_off_is_clean(self):
+        self.assertEqual(self.problems(), [])
+
+    def test_each_departure_from_the_protocol_is_named(self):
+        self.assertIn("not started with --evaluation", " ".join(self.problems(evaluation=False)))
+        self.assertIn("was not frozen", " ".join(self.problems(assist_profile_frozen=False)))
+        self.assertIn("manual assist gain", " ".join(self.problems(manual_assist_gain=0.5)))
+        self.assertIn("servo_enabled", " ".join(self.problems(servo_enabled=True)))
+        self.assertIn("not a live camera", " ".join(self.problems(input="replay", origin="synthetic")))
+        self.assertIn("not a live camera", " ".join(self.problems(input="mouse")))
+
+    def test_missing_information_is_a_problem_not_a_pass(self):
+        self.assertIn("evaluation", " ".join(self.problems(evaluation=None)))
+        self.assertIn("servo_enabled", " ".join(self.problems(servo_enabled=None)))
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIn("no run_*_meta.json", P.audit_run_metadata(tmp)[0])
+
+    def test_an_unreadable_file_is_reported_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "run_0_meta.json").write_text("{not json")
+            self.assertIn("cannot be read", P.audit_run_metadata(tmp)[0])
+
+    def test_every_run_is_checked_not_just_the_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_meta(tmp, run=0)
+            write_meta(tmp, run=1, evaluation=False, assist_profile_frozen=False)
+            problems = P.audit_run_metadata(tmp)
+        self.assertTrue(all(p.startswith("run_1") for p in problems))
+        self.assertEqual(len(problems), 2)
+
+    def test_the_session_audit_includes_it(self):
+        plan = P.make_plans(1)[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            TestAudit().log_session(tmp, plan)
+            write_meta(tmp, evaluation=False)
+            result = P.audit_session(tmp, plan)
+        self.assertFalse(result.ok)
+        self.assertIn("not started with --evaluation", " ".join(result.problems))
 
 
 class TestCommand(unittest.TestCase):

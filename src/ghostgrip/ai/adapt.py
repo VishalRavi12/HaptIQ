@@ -159,9 +159,10 @@ class AssistPolicy:
     def from_config(cls, config) -> "AssistPolicy":
         """Use ai.adapt_alpha and ai.freeze_adaptation from a loaded ghostgrip.config.Config.
 
-        With the committed settings the profile starts FROZEN: nothing learns during a measured
-        run, so the conditions stay comparable (plan 4.5). Set ai.freeze_adaptation to false in
-        config.yaml for a practice run where it should learn between trials."""
+        The committed setting is false: the profile learns between trials unless something freezes
+        it. A measured run is frozen by the app's --evaluation flag (plan 4.5: nothing may learn
+        while a condition is measured); setting ai.freeze_adaptation to true freezes it from the
+        start for any run."""
         policy = cls(AdaptationConfig(alpha=config.ai.adapt_alpha))
         policy.frozen = config.ai.freeze_adaptation
         return policy

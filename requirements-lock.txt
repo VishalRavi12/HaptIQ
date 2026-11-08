@@ -1,4 +1,4 @@
-# Exact versions that passed the whole test suite (468 tests) on 2026-11-08.
+# Exact versions that passed the whole test suite (522 tests) on 2026-11-08, after merging PR #22.
 # Built in a clean environment from requirements.txt alone: Python 3.11.18, macOS 15 arm64.
 # Reproduce it exactly:   pip install -r requirements-lock.txt
 # requirements.txt keeps the allowed ranges; this file is the tested snapshot of them.

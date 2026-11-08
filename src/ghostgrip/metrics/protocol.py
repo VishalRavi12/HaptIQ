@@ -9,15 +9,19 @@ condition follows every other exactly once, so practice and tiredness effects ar
 (technical doc 10.1). With four participants all four orders are used once; more repeat them.
 
 Each participant is one session (P01, P02, ...). Within it the experimenter presses F1-F4 to switch
-condition, 1 / 2 / 3 to choose glass, sponge or block, and N for each new trial. The assist profile
-is frozen (config.yaml ai.freeze_adaptation), so conditions stay comparable. See
+condition, 1 / 2 / 3 to choose glass, sponge or block, and N for each new trial. The measured session
+runs with the app's --evaluation flag, which freezes the assist profile and refuses manual gain overrides,
+so the conditions stay comparable. See
 docs/experiment_protocol.md for the full procedure, consent wording and validity rules.
 
-The audit only checks that what was logged matches the plan (order, number of attempts). It cannot
-tell whether anyone followed the instructions, and it never edits or drops a trial.
+The audit checks that what was logged matches the plan (order, number of attempts) and that every
+run's metadata says it was frozen (--evaluation), camera-driven and servo-off. It cannot tell whether
+anyone followed the spoken instructions, and it never edits or drops a trial.
 """
 import argparse
 from dataclasses import dataclass
+import json
+from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
 from contracts import CONDITION_CODES
@@ -89,7 +93,7 @@ def run_sheet(plan: ParticipantPlan, trials_per_object: int = DEFAULT_TRIALS_PER
              f"    do {PRACTICE_TRIALS} trials with the participant (key N after each), then press Esc",
              "  measured session:",
              f"    python src/ghostgrip/ui/app.py --camera --hardware {hardware} --condition {first} "
-             f"--session-id {plan.session_id}"]
+             f"--evaluation --session-id {plan.session_id}"]
     for i, code in enumerate(plan.order, 1):
         switch = "already selected by --condition" if i == 1 else f"press {CONDITION_KEYS[code]}"
         extra = ("   (cues on: press H once to arm; keep the servo at the table stand, not on the person)"
@@ -102,6 +106,35 @@ def run_sheet(plan: ParticipantPlan, trials_per_object: int = DEFAULT_TRIALS_PER
               f"--participant {plan.number}",
               "  write down anything unusual (camera lost, lighting changed, someone interrupted); never delete a trial"]
     return "\n".join(lines)
+
+
+def audit_run_metadata(folder) -> List[str]:
+    """Check the run_N_meta.json files the app writes: was every run a frozen, camera-driven,
+    servo-off measured run? Missing information is a problem, never assumed to be fine."""
+    folder = Path(folder)
+    paths = sorted(folder.glob("run_*_meta.json"))
+    if not paths:
+        return ["no run_*_meta.json found, so it cannot be confirmed that the runs used --evaluation"]
+    problems = []
+    for path in paths:
+        try:
+            meta = json.loads(path.read_text())
+        except (OSError, ValueError):
+            problems.append(f"{path.name} cannot be read")
+            continue
+        run = path.stem.replace("_meta", "")
+        if meta.get("evaluation") is not True:
+            problems.append(f"{run}: not started with --evaluation, so the assist profile could learn")
+        if meta.get("assist_profile_frozen") is not True:
+            problems.append(f"{run}: the assist profile was not frozen")
+        if meta.get("manual_assist_gain") is not None:
+            problems.append(f"{run}: a manual assist gain was set ({meta.get('manual_assist_gain')})")
+        if meta.get("servo_enabled") is not False:
+            problems.append(f"{run}: servo_enabled was not false; the protocol keeps the servo off")
+        if meta.get("input") != "camera" or meta.get("origin") != "real":
+            problems.append(f"{run}: input was {meta.get('input')!r} labelled {meta.get('origin')!r}, not a live camera "
+                            "labelled real")
+    return problems
 
 
 @dataclass(frozen=True)
@@ -141,6 +174,7 @@ def audit_session(folder, plan: ParticipantPlan) -> AuditResult:
     unknown = sorted(set(attempts) - set(plan.order))
     if unknown:
         problems.append(f"unexpected condition(s) logged: {unknown}")
+    problems += audit_run_metadata(folder)
     return AuditResult(problems, attempts, seen)
 
 

@@ -22,9 +22,10 @@ the system runs end to end with a person in the loop, and give honest descriptiv
   (the buzzer beeps on slip and damage only in the hardware branch that is not merged yet; check which firmware
   is on the board and write it down). So C and D test a light cue, not a tactile one. Do not describe them as
   tactile feedback.
-- The assist profile is **frozen** (`ai.freeze_adaptation: true`): it starts the same for everyone and never
-  changes during the session, so the four conditions stay comparable. Personalisation is built and tested but
-  deliberately not part of this study.
+- The measured session runs with the app's **`--evaluation`** flag: the assist profile starts the same for
+  everyone and never changes, and manual assist overrides are refused, so the four conditions stay comparable.
+  Personalisation is built and tested but deliberately not part of this study. The audit checks each run's
+  metadata file to confirm it.
 
 ## Who and how many
 
@@ -55,7 +56,8 @@ python vision_preview.py --calibrate         # calibrate for the person being te
 PYTHONPATH=src python -m ghostgrip.metrics.protocol --participants 4     # print the run sheets
 ```
 
-Recalibrate for each participant: hand sizes differ. Check `ai.freeze_adaptation` is `true` in `config.yaml`.
+Recalibrate for each participant: hand sizes differ. Measured sessions are started with `--evaluation` (the run
+sheet already does this); the practice session is not, so it is not frozen and is never analysed.
 
 ## Procedure per participant
 
@@ -70,7 +72,8 @@ The run sheet printed by `ghostgrip.metrics.protocol` has every command and key.
 4. Say the same short instructions every time: "Open your hand to start, pick up the object, carry it to the
    marked zone on the right, and let go. Take your time; you have 30 seconds."
 5. Do not coach during a trial, and do not tell participants which condition they are in.
-6. Afterwards run the audit and write down anything unusual.
+6. Afterwards run the audit, which also checks that the run really was `--evaluation`, camera-driven and servo-off,
+   and write down anything unusual.
 
 ## What counts, decided in advance
 
@@ -97,7 +100,8 @@ PYTHONPATH=src python -m ghostgrip.metrics.report data/local/sessions/P01 data/l
 ```
 
 The report prints one table per participant and then one descriptive table over all of them. The audit checks
-that what was logged matches the plan (order, number of attempts) and reports any difference.
+that what was logged matches the plan (order, number of attempts) and that every run's metadata says it was
+frozen, camera-driven and servo-off, and reports any difference.
 
 ## Reporting
 

@@ -34,8 +34,9 @@ class TestCommittedFile(unittest.TestCase):
         self.assertEqual(cfg.ai.prediction_horizon_ms, 120)
         self.assertEqual(cfg.hardware.baud, 115200)
 
-    def test_adaptation_is_frozen_in_the_committed_file(self):
-        self.assertTrue(load_config().ai.freeze_adaptation)
+    def test_adaptation_is_not_frozen_by_the_committed_file(self):
+        # A measured run is frozen by the app's --evaluation flag, not by the settings file.
+        self.assertFalse(load_config().ai.freeze_adaptation)
 
     def test_freeze_adaptation_must_be_a_real_boolean(self):
         for bad in ("yes", 1, 0, None, "false"):

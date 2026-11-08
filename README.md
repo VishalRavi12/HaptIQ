@@ -54,7 +54,7 @@ first and then the rest of the command.
 | Record your hand (numbers, never images) | `PYTHONPATH=src python -m ghostgrip.vision.cli --frames 600 --record` | camera, hand model, calibration |
 | How do the predictor and assistance do on a recording? | `PYTHONPATH=src python -m ghostgrip.metrics.trace_report data/local/trace_XXXX.csv --sweep` | a recording |
 | Results of a logged session (several folders: one table each, then a total) | `PYTHONPATH=src python -m ghostgrip.metrics.report data/local/sessions/me01` | a session folder |
-| Volunteer study: condition orders and run sheets, and an audit of a finished session | `PYTHONPATH=src python -m ghostgrip.metrics.protocol --participants 4` | nothing else |
+| Volunteer study: condition orders and run sheets, and an audit of a finished session (it checks the run really was `--evaluation`) | `PYTHONPATH=src python -m ghostgrip.metrics.protocol --participants 4` | nothing else |
 
 Results from `ghostgrip.metrics.report` are labelled **synthetic** and are a pipeline check, not an experiment.
 Add `--csv summary.csv` or `--plot success.png` to export them.
@@ -68,7 +68,7 @@ Add `--csv summary.csv` or `--plot success.png` to export them.
 | Hardware: firmware, serial link, safety policy, mock board | Built and tested with the mock. Its author reports (2026-11-08) that the stop button and the servo were tried on a real board, **unloaded and inside an 80-100 degree window**: 17 of 17 button presses disarmed it, and stop worked mid-cue. Three items are still open in `docs/hardware_inventory.md`: the servo's supply voltage has **not been measured** (5 V is assumed), its neutral position has not been checked on its mount, and a second person has not watched a first trial. **No servo should touch a person until all three are done.** |
 | AI core: predictor, grasp intent, bounded adaptation | Built and tested on **synthetic traces only**. The predictor beats the baselines while the hand moves and loses for a parked, jittery hand. |
 | Settings, CI, logging and results, preflight | Built and tested. |
-| Everything running together (camera, AI, simulation, logger, hardware link) | **Wired and run headless** on the synthetic traces with the mock board (`ui/app.py --replay clean --hardware mock`). **Not done:** a live camera with real people, the real board in the loop, and the four-condition comparison. The assist profile is frozen by default (`ai.freeze_adaptation: true`), so a measured run cannot drift. |
+| Everything running together (camera, AI, simulation, logger, hardware link) | **Wired and run headless** on the synthetic traces with the mock board (`ui/app.py --replay clean --hardware mock`). **Not done:** a live camera with real people, the real board in the loop, and the four-condition comparison. A measured run is started with `--evaluation`, which freezes the assist profile so it cannot drift. |
 | Real-user data and the four-condition comparison | **Not done.** Nothing here supports a claim about real people. |
 
 The four conditions are A baseline, B AI only, C haptic only, D AI and haptic.

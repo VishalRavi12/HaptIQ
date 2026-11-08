@@ -18,8 +18,9 @@ ai:
   grip_confirm_frames: 3          # valid frames before a state change counts
   adapt_alpha: 0.15               # smoothing weight for per-user adaptation (0 to 1)
   low_confidence_behavior: disable_assist   # tracking lost or unreliable: assistance off
-  freeze_adaptation: true         # true = the assist profile never changes (measured runs, plan 4.5);
-                                  # false only for practice, where it learns between trials
+  freeze_adaptation: false        # true = the assist profile never changes. Measured runs normally use the
+                                  # app's --evaluation flag instead (it also refuses manual gain overrides);
+                                  # this setting freezes it from the start for any run (plan 4.5)
 
 hardware:
   enabled: true                   # false = laptop-only, never open a serial port
