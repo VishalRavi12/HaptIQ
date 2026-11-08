@@ -1,201 +1,120 @@
-# GhostGrip Beginner Starter Kit
+# GhostGrip (HaptIQ)
 
-A real, minimal codebase for a 4-person 36-hour hackathon project.
+A research prototype from a 36-hour hackathon: a webcam tracks one hand, a small predictor and rule-based
+grasp detector run on top of it, a 2D simulation of three virtual objects reacts, and an Arduino turns
+simulation events into a safe light (and, once verified, servo) cue.
 
-**Please read:** The starter gives you a mouse-controlled virtual-grasp demo,
-optional MediaPipe camera input, and optional Arduino built-in LED responses.
-It has a **threshold-based grasp and constant-velocity prediction BASELINE**.
-It is **not yet** a trained AI classifier, adaptive therapeutic system, or
-physically measured servo-haptic system.
-
-## 0. First five minutes: team agreement
-
-- Member 1 owns `member1_camera_test.py`, `hand_tracking.py`.
-- Member 2 owns `grasp_ai.py`, `member2_prediction_test.py`.
-- Member 3 owns `simulation.py`, `main.py` and project integration.
-- Member 4 owns `arduino/`, `hardware.py`.
-- `contracts.py` is the shared agreement. Discuss changes before editing it.
-- Keep a group message with status: DONE / BLOCKED / NEXT.
-
-## 1. Install tools
-
-All: VS Code, Python **3.11 or 3.12**, GitHub account. 
-Member 4: Arduino IDE 2.
-Official setup: https://code.visualstudio.com/download ; https://www.python.org/downloads/ ;
-https://docs.arduino.cc/software/ide-v2/tutorials/getting-started/ide-v2-downloading-and-installing/
-
-Open VS Code -> File -> Open Folder -> this `GhostGrip_Beginner_Starter` folder.
-Open Terminal -> New Terminal. **Always run commands from this folder**.
-
-### Windows PowerShell
+**It is not a medical device.** No real force is measured, nothing here is clinically validated, and every
+result so far comes from synthetic data. See [What is and is not done](#what-is-and-is-not-done).
 
 ```
-py -3.11 -m venv .venv
-.venv\Scripts\python.exe -m pip install --upgrade pip
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe main.py
+webcam -> perception -> predictor + intent -> assist policy -> simulation -> haptic policy -> Arduino
+          (HandStateV2)   (Prediction)         (gain 0-1)      (SimEventV2)   (CueEvent)       (DeviceState)
 ```
 
-If you installed only 3.12, change `-3.11` to `-3.12`.
-You do **not** need to activate the environment when using explicit paths.
+The shared data types are in [`contracts.py`](contracts.py). Changing them needs all four team members' approval.
 
-### macOS / Linux terminal
+## Quick start
 
-```
-python3.11 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python main.py
-```
-
-If you installed 3.12, replace `python3.11` with `python3.12`.
-
-**Success:** A window called `GhostGrip - Beginner Demo` appears with three circles.
-Put your mouse on a circle, hold left-click, move it, then release.
-Press `R` to reset, `Q` to exit. This is the starting point, not the final product.
-
-## 2. Member 1: webcam and hand tracking
-
-1. Run the camera alone:
-   `python member1_camera_test.py` (or `.venv/bin/python` / `.venv\Scripts\python.exe`).
-2. You should see a camera window and your own hand. Press `Q` to close.
-3. To use MediaPipe, run `python download_hand_model.py` while online.
-   This uses the official Google model bundle linked in its documentation.
-4. Run `python member1_hand_test.py`.
-5. Move and pinch your hand in view of the camera.
-6. You should see numbers changing: `x`, `y`, `pinch`, `closing_speed`.
-7. Report hand tracking issues and test in good front lighting.
-
-Understanding: `x/y` tell us *where* the hand is (0...1); `pinch` is
-thumb-to-index distance relative to the hand size; `closing_speed` estimates
-how quickly the measured pinch ratio decreases. No force is measured.
-
-If camera permissions fail on macOS: System Settings -> Privacy & Security ->
-Camera -> allow the terminal/VS Code application; restart that application.
-Windows: Settings -> Privacy & security -> Camera.
-
-## 3. Member 2: prediction
-
-1. Run `python member2_prediction_test.py`.
-2. Notice that `current_x` grows from 0.10 to 0.25.
-3. Notice that `predicted_x` tends to be further right than `current_x`.
-4. Read `grasp_ai.py`. Change `horizon_s=0.15` to `0.10`.
-5. Re-run and notice the forecast moves a smaller distance.
-6. Run all tests: `python -m unittest discover -s tests -v`.
-7. Read `NEXT_STEPS.md` before creating a real trained grasp classifier.
-
-Understanding: Motion prediction means estimating position a fraction of a
-second into the future. The bundled one uses constant velocity. It is a
-simple mathematical baseline, NOT proof of AI novelty.
-
-## 4. Member 3: simulation
-
-1. Run `python main.py`.
-2. Put mouse cursor near glass and HOLD left mouse button.
-3. Move toward the right, then release the button.
-4. Watch terminal print `EVENT: GRASP glass`, then `EVENT: RELEASE glass`.
-5. Press `R`; repeat with sponge and block.
-6. Open `simulation.py`. Change glass color (RGB triple) or object position.
-7. Run again to see your change.
-8. Read `NEXT_STEPS.md` for the next physics and experiment milestones.
-
-IMPORTANT: In this first lesson `successes` is a RELEASE count, not validated
-task success. The objects are circles, not realistic biomechanics.
-
-## 5. Member 4: Arduino built-in LED FIRST (no wiring)
-
-1. Install Arduino IDE 2.
-2. Plug Arduino Uno into the laptop using a DATA-capable USB cable.
-3. Arduino IDE -> select the correct board `Arduino Uno` and port.
-4. File -> Examples -> 01.Basics -> Blink.
-5. Click Verify (checkmark); then Upload (right arrow).
-6. The yellow built-in LED labelled L should flash.
-7. Close the Blink example. Open:
-   `arduino/ghostgrip_led_test/ghostgrip_led_test.ino`.
-8. Click Upload.
-9. Open Serial Monitor and set baud to 115200. Set line ending to Newline.
-10. Type `GRASP`, press Send. Built-in LED should turn ON.
-11. Type `RELEASE`, press Send. Built-in LED should turn OFF.
-12. **Close Serial Monitor before Python connects**. Only one app can own the port.
-13. Find your port name: Windows often `COM3`; macOS often
-    `/dev/cu.usbmodem...`; Linux often `/dev/ttyACM0`.
-14. From project terminal run `python main.py --port COM3`, replacing with your
-    actual observed port.
-15. Click a virtual object to grab; onboard LED ON. Release; LED OFF.
-
-DO NOT connect the unknown servo to someone's finger, or guess its power
-wiring. Verify exact model, operating voltage, current and suitable power
-supply before trying external servo movements. See Arduino's servo guide:
-https://docs.arduino.cc/learn/electronics/servo-motors/
-
-## 6. Combine camera and simulation
-
-After the model download and camera test are successful:
+Python **3.11** (3.12 also works). Run everything from the repository root.
 
 ```
-python main.py --camera
+conda create -n ghostgrip python=3.11 -y        # or: python3.11 -m venv .venv
+conda activate ghostgrip                        # or: source .venv/bin/activate   (Windows: .venv\Scripts\activate)
+pip install -r requirements.txt
+
+python -m pytest -q tests                       # all tests; no camera or hardware needed
+python scripts/preflight.py --no-camera         # what can this laptop do right now?
 ```
 
-Move index finger and thumb toward each other. When pinch ratio is below the
-baseline threshold (0.55), the program attempts a grasp at the virtual
-pointer location. When pinch opens, it releases. Your hand must be visible.
-The actual threshold can vary by person and camera; tune it with logged data.
+`scripts/preflight.py` lists missing packages, the hand model, a saved calibration, a camera and an
+Arduino, and tells you which modes will work. Drop `--no-camera` to also try opening the camera
+(macOS asks for permission the first time).
 
-If Arduino LED test has passed, run:
+Windows PowerShell: where a command below starts with `PYTHONPATH=src`, run `$env:PYTHONPATH = "src"` once
+first and then the rest of the command.
+
+## Things you can run
+
+| What | Command | Needs |
+|---|---|---|
+| Simulation, mouse control | `python src/ghostgrip/ui/app.py` (`--scene sandbox`, `--condition B`) | nothing else |
+| Simulation, replay a recording | `python src/ghostgrip/ui/app.py --replay data/synthetic/clean.csv` | nothing else |
+| Settings check | `PYTHONPATH=src python -m ghostgrip.config` | nothing else |
+| Synthetic hand traces | `PYTHONPATH=src python -m ghostgrip.ai.synthetic` | nothing else |
+| Predictor vs baselines | `PYTHONPATH=src python -m ghostgrip.ai.predict` | nothing else |
+| Grasp intent timeline | `PYTHONPATH=src python -m ghostgrip.ai.intent all` | nothing else |
+| Whole pipeline on synthetic data, with results table | `PYTHONPATH=src python -m ghostgrip.metrics.report --synthetic-demo data/local/demo` | nothing else |
+| Arduino with a fake board | `PYTHONPATH=src python -m ghostgrip.hardware.cli --mock cue CONTACT` | nothing else |
+| Hand model download (once) | `python download_hand_model.py` | internet |
+| Calibrate, then live hand preview | `python vision_preview.py --calibrate`, then `python vision_preview.py` | camera, hand model |
+| Real Arduino | `PYTHONPATH=src python -m ghostgrip.hardware.cli cue CONTACT` | the board, USB data cable |
+
+Results from `ghostgrip.metrics.report` are labelled **synthetic** and are a pipeline check, not an experiment.
+Add `--csv summary.csv` or `--plot success.png` to export them.
+
+## What is and is not done
+
+| Area | State |
+|---|---|
+| Perception: landmarks to calibrated `HandStateV2`, trace recording | Built and tested. One 20 s live run was measured by its author (about 29.6 FPS, 4.5 ms inference); see `docs/perception_notes.md`. |
+| Simulation: glass, sponge and block, trials, replay, 2D UI | Built and tested (`tests/simulation`). The window has been looked at by its author only. |
+| Hardware: firmware, serial link, safety policy, mock board | Built and tested with the mock. The LED path was tried on a real board. The **servo is unpowered and the stop button is not connected**: no servo has moved and none should touch a person until `docs/hardware_inventory.md` is fully checked. |
+| AI core: predictor, grasp intent, bounded adaptation | Built and tested on **synthetic traces only**. The predictor beats the baselines while the hand moves and loses for a parked, jittery hand. |
+| Settings, CI, logging and results, preflight | Built and tested. |
+| Everything running together on a live camera | **Not done.** `ui/app.py` still uses a stand-in predictor and a fixed assistance gain; wiring in the real ones is the next step. |
+| Real-user data and the four-condition comparison | **Not done.** Nothing here supports a claim about real people. |
+
+The four conditions are A baseline, B AI only, C haptic only, D AI and haptic.
+
+## Repository layout
 
 ```
-python main.py --camera --port COM3
+contracts.py                  shared data types (change only with all four approvals)
+config.yaml                   every setting, one place; checked by src/ghostgrip/config.py
+src/ghostgrip/
+  vision/  ai/features.py  ai/calibration.py      perception: camera landmarks to HandStateV2
+  ai/synthetic.py  predict.py  intent.py  adapt.py   fake traces, Kalman predictor, grasp states, assistance
+  simulation/  ui/                                 virtual objects, trials, replay, Pygame window
+  hardware/                                        serial link, safety policy, mock Arduino, CLI
+  metrics/                                         session logging, results, plots, synthetic pipeline run
+  preflight.py                                     the laptop check
+firmware/ghostgrip_uno/       Arduino firmware (boots disarmed; servo off until verified)
+sim/wokwi/                    browser simulation of the board
+data/synthetic/               fake hand traces (safe to share)       data/local/   real recordings, never committed
+docs/                         perception notes, hardware inventory and safety checklist
+tests/                        one folder per area            scripts/   preflight launcher
+main.py simulation.py grasp_ai.py hand_tracking.py ...      the original beginner starter, kept for reference
 ```
 
-Replace `COM3` with the actual port. This is the first complete proof of
-concept: live camera -> grasp rule -> virtual interaction -> physical LED.
+## Working together
 
-## 7. Project timeline
+- One branch per piece of work, then a pull request into `main`. CI runs `pytest` on every pull request.
+- Ask someone else to review your pull request; merge one at a time, after CI passes.
+- Only edit the area you own. Changes to `contracts.py` or the serial protocol go through one shared pull request.
+- Stage specific files (`git add path/to/file`), never `git add .`. Never commit `.venv`, the hand model,
+  recordings, video, calibration profiles or secrets (`data/local/` and `assets/*.task` are ignored).
+- Re-run the tests after pulling `main`.
 
-- Hours 0-2: each member runs an independent tiny program; agree on contracts.
-- Hours 2-6: Member 1 hand landmarks; Member 2 prediction baseline; Member 3
-  mouse simulation; Member 4 Arduino LED serial control.
-- Hours 6-12: Member 3 combines the four into `main.py`; get a stable demo.
-- Hours 12-20: develop/compare learned grasp state model + Kalman forecasting,
-  personalization, validate safe servo system.
-- Hours 20-27: instrument physical response, compare four modes, log data.
-- Hours 27-32: UX polish, record fallback demo and testing evidence.
-- Hours 32-36: re-run everything on demo laptop, rehearse and submit.
+## Data and privacy
 
-## 8. Troubleshooting
+Camera video is never stored. Logs hold numbers only (pointer, closure, tracking, predictions, events) in
+`data/local/`, under an anonymous id (letters, digits, `-`, `_`). Every row the session logger writes says whether it
+is `real` or `synthetic`, and the two are never added together in a results table.
 
-**`python` not found:** Windows use `py`, macOS use `python3`, or use the
-virtual-environment Python executable from section 1.
+## Safety
 
-**`No module named pygame` / `mediapipe`:** You installed packages into a
-different interpreter. Use the `.venv` executable explicitly.
+The servo is off in `config.yaml` and in the firmware. Do not connect the kit's 12 V adapter to it, and do not
+attach it to a finger, until the checklist in `docs/hardware_inventory.md` is complete. The board boots
+disarmed, a 500 ms watchdog disarms it if the laptop goes quiet, and `STOP` always wins. A light cue is a
+valid final output.
 
-**Camera shows black / busy:** Close Zoom, Meet, Teams. Re-check operating
-system camera permission. Try another index (`cv2.VideoCapture(1)`).
+## Troubleshooting
 
-**`hand_landmarker.task` missing:** Run `python download_hand_model.py` with
-internet. The model is NOT in the zip.
-
-**Arduino not detected:** Try a known data USB cable, change USB port,
-select Arduino Uno in the IDE, install drivers if needed, and check port.
-
-**Serial permission/busy:** Close Arduino Serial Monitor before running Python.
-Verify the port name. Linux may require membership of `dialout` group.
-
-**No servo power / unexplained resets:** Stop external wiring. Check power
-budget and grounds against the servo's documentation. Do not continue with
-the unknown model without confirming electrical limits.
-
-**Pygame window off-screen or too large:** Change `WIDTH, HEIGHT` in
-`simulation.py` to fit the laptop display.
-
-## 9. Testing and honesty
-
-To run tests: `python -m unittest discover -s tests -v`.
-The tests check baseline prediction and synthetic simulation logic.
-They are NOT tests of camera accuracy or actual hardware.
-
-**Status you can claim after following these instructions:** A toy grasp
-simulator with camera-based hand position estimation and Arduino LED event
-feedback. To claim predictive AI and tactile haptics, finish the steps in
-`NEXT_STEPS.md` and collect real measurements.
+- **Wrong Python / no `mediapipe`:** use Python 3.11 and `pip install -r requirements.txt` in the active environment.
+- **OpenCV and pygame warnings on macOS (`implemented in both ...`):** `pip uninstall -y opencv-python opencv-python-headless`, then
+  `pip install -r requirements.txt` (it pins the build that does not clash).
+- **Camera black or busy:** close Zoom, Meet and Teams, and allow the terminal under System Settings, Privacy and Security, Camera.
+- **`hand_landmarker.task` missing:** `python download_hand_model.py` (the model is not in the repository).
+- **Serial port busy:** close the Arduino Serial Monitor; only one program can own the port.
+- **Anything else:** run `python scripts/preflight.py` first; it names what is missing.
