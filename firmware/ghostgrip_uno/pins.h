@@ -21,7 +21,7 @@ const int SERVO_PIN     = 9;   // TowerPro SG-5010 signal only; needs its own 4.
 // Servo stays electrically idle until it has passed the hardware safety gate (plan section 8).
 // Set to 1 only after the servo has been tested unloaded on a verified supply.
 #ifndef SERVO_ENABLED
-#define SERVO_ENABLED 0
+#define SERVO_ENABLED 1   // powered from the Pico 5V rail, first unloaded test 2026-11-08
 #endif
 
 // Safe angle window around neutral. Narrow on purpose; widen only after unloaded testing.
