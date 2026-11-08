@@ -4,7 +4,6 @@ from pathlib import Path
 import time
 
 import cv2
-import mediapipe as mp
 import math
 import json
 import platform
@@ -13,6 +12,8 @@ from datetime import datetime, timezone
 from src.ghostgrip.ai.features import normalized_pinch_gap, calibrated_closure, tracking_quality
 from src.ghostgrip.ai.calibration import PHASES, build_profile, save_profile
 from src.ghostgrip.vision.pipeline import PerceptionPipeline
+from src.ghostgrip.vision.camera import CameraTracker
+from src.ghostgrip.config import load_config
 from src.ghostgrip.vision.trace import TraceRecorder
 
 
@@ -27,7 +28,8 @@ CONNECTIONS = (
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--camera', type=int, default=0)
+    parser.add_argument('--camera', type=int, help='Override configured camera index')
+    parser.add_argument('--config', help='Settings YAML; defaults to repository config.yaml')
     parser.add_argument('--calibrate', action='store_true', help='Run a 20-second calibration')
     parser.add_argument('--measure', action='store_true', help='Press M for a 20-second performance run')
     parser.add_argument('--record', action='store_true', help='Save hand states locally as CSV (no video)')
@@ -48,8 +50,7 @@ def main():
     if args.record and (profile is None or args.calibrate):
         raise SystemExit('Record after calibration: run --calibrate first, then --record separately.')
     pipeline = PerceptionPipeline(profile) if profile else None
-    camera = cv2.VideoCapture(args.camera)
-    detector = None
+    camera = CameraTracker(args.camera, model, config=load_config(args.config).camera)
     recorder = None
     measurement_start = None
     measurement_frames = 0
@@ -57,20 +58,12 @@ def main():
     inference_times = []
     measurement_end = None
     try:
-        if not camera.isOpened():
-            raise RuntimeError('Camera unavailable. Check permissions and close other camera apps.')
-        options = mp.tasks.vision.HandLandmarkerOptions(
-            base_options=mp.tasks.BaseOptions(model_asset_path=str(model)),
-            running_mode=mp.tasks.vision.RunningMode.VIDEO,
-            num_hands=1,
-        )
-        detector = mp.tasks.vision.HandLandmarker.create_from_options(options)
+        camera.open()
         if args.record:
             trace_path = Path(__file__).parent / 'data/local' / (
                 'trace_' + datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '.csv')
             recorder = TraceRecorder(trace_path)
             print(f'Recording hand states (no video) to {trace_path}', flush=True)
-        last_timestamp = -1
         displayed_state = None
         display_updated_at = -1000
         calibration_start = None
@@ -83,41 +76,42 @@ def main():
                    'REACH: move left/right AND up/down',
                    'RELEASE: return to your open hand pose')
         while True:
-            ok, frame = camera.read()
-            if not ok:
-                print('Camera frame unavailable; stopping preview.')
+            observation = camera.read()
+            if observation is None:
                 break
-            frame = cv2.flip(frame, 1)
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            timestamp = max(last_timestamp + 1, time.monotonic_ns() // 1_000_000)
-            last_timestamp = timestamp
-            image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            inference_start = time.perf_counter()
-            result = detector.detect_for_video(image, timestamp)
-            inference_ms = (time.perf_counter() - inference_start) * 1000
+            timestamp = observation.t_ms
+            frame = observation.frame
+            if observation.error:
+                if pipeline is not None:
+                    loss = pipeline.update(timestamp, None, 1, 1)
+                    if recorder is not None:
+                        recorder.write(loss)
+                print(observation.error)
+                break
+            inference_ms = observation.inference_ms
             status = 'TRACKING LOST - show one hand'
             sample = None
             landmark_xy = None
             quality = 0.0
             state = None
-            if result.hand_landmarks:
+            if observation.points:
                 height, width = frame.shape[:2]
-                points = result.hand_landmarks[0]
-                landmark_xy = [(p.x, p.y) for p in points]
-                pixels = [(int(p.x * (width - 1)), int(p.y * (height - 1))) for p in points]
+                points = observation.points
+                landmark_xy = points
+                pixels = [(int(p[0] * (width - 1)), int(p[1] * (height - 1))) for p in points]
                 for start, end in CONNECTIONS:
                     cv2.line(frame, pixels[start], pixels[end], (70, 220, 70), 2)
                 for point in pixels:
                     cv2.circle(frame, point, 4, (0, 220, 255), -1)
-                x = max(0.0, min(1.0, (points[4].x + points[8].x) / 2))
-                y = max(0.0, min(1.0, (points[4].y + points[8].y) / 2))
+                x = max(0.0, min(1.0, (points[4][0] + points[8][0]) / 2))
+                y = max(0.0, min(1.0, (points[4][1] + points[8][1]) / 2))
                 cv2.circle(frame, (int(x * (width - 1)), int(y * (height - 1))),
                            5, (255, 255, 255), 1)
                 status = f'TRACKING | pointer x={x:.2f} y={y:.2f}'
-                coords = [(p.x * width, p.y * height) for p in points]
-                quality = tracking_quality([(p.x, p.y) for p in points], width, height)
+                coords = [(p[0] * width, p[1] * height) for p in points]
+                quality = tracking_quality([(p[0], p[1]) for p in points], width, height)
                 reliable = (all(math.isfinite(v) and 0 <= v <= 1
-                                for p in points for v in (p.x, p.y))
+                                for p in points for v in (p[0], p[1]))
                             and math.dist(coords[5], coords[17]) >= 10)
                 if reliable:
                     gap = normalized_pinch_gap(coords[4], coords[8], coords[5], coords[17])
@@ -216,20 +210,24 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        if recorder is not None:
-            recorder.close()
-            print(f'Trace saved to {recorder.path}')
-        if detector is not None:
-            detector.close()
-        camera.release()
-        cv2.destroyAllWindows()
+        try:
+            if recorder is not None:
+                recorder.close()
+                print(f'Trace saved to {recorder.path}')
+        finally:
+            try:
+                camera.close()
+            finally:
+                cv2.destroyAllWindows()
         if measurement_frames and measurement_end is not None:
             duration = measurement_end - measurement_start
             ordered = sorted(inference_times)
             report = {
                 'recorded_at_utc': datetime.now(timezone.utc).isoformat(),
                 'python': platform.python_version(), 'os': platform.platform(),
-                'camera_index': args.camera,
+                'camera_index': camera.camera_index,
+                'target_fps_requested': camera.target_fps,
+                'fps_request_accepted': camera.fps_request_accepted,
                 'frame_size': [int(frame.shape[1]), int(frame.shape[0])] if frame is not None else None,
                 'duration_s': round(duration, 3), 'completed_20_seconds': duration >= 20,
                 'frames': measurement_frames,
@@ -240,7 +238,7 @@ def main():
                 'tracking_availability_percent': round(100 * measurement_valid / measurement_frames, 2),
                 'tracking_definition': 'Accepted motion state when calibrated; valid geometric sample otherwise',
                 'calibration_loaded': profile is not None,
-                'timing_scope': 'Inference excludes capture, rendering and smoothing delay; FPS includes preview loop',
+                'timing_scope': 'Detector call includes image wrapping/inference; excludes capture, color conversion, rendering and smoothing delay; FPS includes preview loop',
             }
             path = Path(__file__).parent / 'data/local' / (
                 'performance_' + datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '.json')

@@ -1,0 +1,42 @@
+# GhostGrip settings: the single source of truth (technical doc section 8.4).
+# Loaded and checked by src/ghostgrip/config.py. Every key below is required;
+# unknown keys are rejected so a typo cannot be silently ignored.
+# Check this file any time with:  PYTHONPATH=src python -m ghostgrip.config
+
+camera:
+  index: 0              # which webcam (0 = default)
+  mirror: true          # mirrored view; Member A already mirrors, so do not mirror twice
+  target_fps: 30        # requested camera frames per second
+
+simulation:
+  width: 960            # world size in pixels (matches simulation/world.py)
+  height: 540
+  physics_hz: 60        # fixed physics steps per second (matches simulation/world.py)
+
+ai:
+  prediction_horizon_ms: 120      # how far ahead the predictor looks (plan: 100-200 ms)
+  grip_confirm_frames: 3          # valid frames before a state change counts
+  adapt_alpha: 0.15               # smoothing weight for per-user adaptation (0 to 1)
+  low_confidence_behavior: disable_assist   # tracking lost or unreliable: assistance off
+
+hardware:
+  enabled: true                   # false = laptop-only, never open a serial port
+  port: AUTO                      # AUTO, or a port such as /dev/cu.usbserial-XXXX or COM3
+  baud: 115200
+  watchdog_ms: 500                # board disarms if it hears nothing for this long (firmware)
+  keepalive_ms: 250               # host sends KA at least this often while armed
+  cue_cooldown_ms: 500            # minimum time between two physical cues
+  cue_duration_ms: 150            # length of one cue (firmware allows at most 500)
+  min_tracking_quality: 0.6       # below this no physical cue is sent
+  contact_offset_deg: 5           # CONTACT moves the servo this far from neutral
+  # Servo. Stays OFF until the hardware safety gate (plan section 8) is fully checked.
+  # The three angles stay VERIFY until the servo has been tested unloaded on a verified
+  # supply. The loader refuses to turn the servo on while any of them is still VERIFY.
+  servo_enabled: false
+  servo_neutral_deg: VERIFY
+  servo_min_deg: VERIFY
+  servo_max_deg: VERIFY
+
+experiment:
+  save_raw_video: false           # never store camera footage unless everyone consents
+  participant_id: anonymous       # letters, digits, - and _ only; never a real name or email

@@ -35,6 +35,7 @@ HELP = [
     "Wheel: set grip (stays)   Space: open hand",
     "1 glass  2 sponge  3 block  0 sandbox",
     "F1-F4: condition A-D   N: next trial",
+    "[ / ]: assist gain -/+ 0.1 (conditions B, D)",
     "T: lose tracking  L: low quality  J: jitter",
     "G: ghost  F9: record trace  R: reset  Esc: quit",
 ]
@@ -70,7 +71,12 @@ class Hud:
         y = self._line(surf, f"Tracking: {trk}", x, y, color=col)
         y = self._line(surf, f"Phase: {snap.phase}", x, y, color=phase_color(snap.phase))
         y = self._line(surf, f"q = {snap.q:0.2f}   effort G = {snap.effort:0.2f} (synthetic)", x, y)
-        assist = f"ON gain {snap.assist_gain:0.2f}" if snap.assist_enabled else "OFF"
+        if not snap.assist_enabled:
+            assist = "OFF"
+        elif snap.assist_active:
+            assist = f"ON gain {snap.assist_gain:0.2f}"
+        else:
+            assist = f"PAUSED gain {snap.assist_gain:0.2f}"   # unreliable tracking or gain 0
         y = self._line(surf, f"Assist: {assist}   Ghost: {'ON' if info.ghost_on else 'OFF'}"
                              f"{'   REC' if info.recording else ''}", x, y, color=DIM)
         y += 4

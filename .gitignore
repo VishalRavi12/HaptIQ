@@ -4,4 +4,6 @@ __pycache__/
 .DS_Store
 assets/*.task
 *.csv
+# Synthetic traces contain no personal data and are shared on purpose.
+!data/synthetic/*.csv
 data/local/

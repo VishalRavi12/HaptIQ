@@ -1,10 +1,11 @@
 # Member A: perception progress and measurements
 
-## Measured preview performance
+## Historical Phase 0 preview performance
 
 Source: local report `data/local/performance_20261107_221323_987525.json`,
 recorded at 2026-11-08 03:13:23 UTC (November 7, 10:13:23 PM EST).
-These are measurements from one run, not estimates or averages across sessions.
+These are measurements from one Phase 0 run, not estimates or averages across sessions.
+They have not been remeasured after the Phase 1 camera refactor.
 
 | Item | Result |
 | --- | --- |
@@ -48,10 +49,9 @@ other users, or during occlusion. Lighting and camera model were not recorded.
   zero for missing/invalid landmarks or rejected motion states. It is not model
   confidence and does not detect all occlusions. The user confirmed the live
   indicator responds as expected.
-- 31 perception tests and the 4 original baseline tests passed after trace
-  integration. They cover feature
-  bounds, calibration validation, jitter attenuation, sustained motion, variable
-  timestamps, tracking loss, and jump rejection.
+- Automated perception checks cover feature bounds, calibration validation,
+  jitter attenuation, sustained motion, variable timestamps, loss/recovery,
+  jump rejection, camera mirroring, resource cleanup and recorded source output.
 
 Screen coordinates use the top-left origin: x increases rightward and y
 increases downward. Thus vx is negative for leftward motion and vy is negative
@@ -62,8 +62,8 @@ for upward motion. Closure q stays within [0, 1]; dq/dt can have either sign.
 From the project root with the virtual environment active:
 
 ```bash
-python -m unittest discover -s tests/vision -v
-python vision_preview.py --measure
+.venv/bin/python -m pytest tests/vision -q
+.venv/bin/python vision_preview.py --measure
 ```
 
 Position the entire hand in view, click the preview window, then press M.
@@ -71,59 +71,80 @@ Keep the hand visible for the 20-second measurement. Results print in the
 terminal and save to a timestamped JSON file under gitignored `data/local/`.
 Early termination marks a shorter run as incomplete. No video is recorded.
 
-## Still required before the complete Member A handoff
+## Phase 1 reusable camera source
 
-- Confirm the proposed contract with the team and sync any final revisions.
-- Add an explicit left/right test of the camera mirror transform. The adapter
-  test already checks that mirrored input is not mirrored a second time.
-- Test the final pipeline and coordinate integration with Members B and D.
-- Submit the Member A pull request when the module and handoff are ready.
+The merged root `contracts.py` is the shared interface; no contract changes are
+required for this source. `LiveHandSource` emits that exact `HandStateV2` type.
+Run commands from the repository root:
 
-## Provisional shared-contract integration
-
-PR #1 was still open when checked for this integration. Local `contracts.py`
-matches the exact proposal at commit
-`f3583aca65c7789969f3610ca6383377a2c8ba2c` and preserves all v1 types.
-This does not constitute team approval or a GitHub merge.
-
-`src/ghostgrip/vision/pipeline.py` exposes `PerceptionPipeline.update`, which
-returns the shared `HandStateV2` class, and `stream`, which yields those objects
-from incoming observations. The preview now uses this adapter. The internal
-motion helper still uses dictionaries; callers of the adapter receive objects.
-
-Example from the repository root:
-
-```python
-import json
-from pathlib import Path
-from src.ghostgrip.vision.pipeline import PerceptionPipeline
-
-profile = json.loads(Path('data/local/calibration.json').read_text())
-pipeline = PerceptionPipeline(profile)
-# observations yields (monotonic_ms, landmarks_xy_or_None, width, height).
-# Each landmark list contains 21 normalized pairs detected on a mirrored frame.
-for state in pipeline.stream(observations):
-    if state.tracking_ok:
-        consume(state)  # Replace with the simulator or predictor call.
-    else:
-        pause_interaction()  # Replace with the consumer's loss handler.
+```bash
+# Preview; Q closes the camera before another process opens it.
+.venv/bin/python vision_preview.py
+# Calibrate first if the saved profile is unavailable.
+.venv/bin/python vision_preview.py --calibrate
+# Read 150 states without a window, then release the camera.
+PYTHONPATH=src .venv/bin/python -m ghostgrip.vision.cli --frames 150
+# Optional numeric CSV recording, no images.
+PYTHONPATH=src .venv/bin/python -m ghostgrip.vision.cli --frames 150 --record
 ```
 
-The caller owns camera acquisition; the generator is also usable with synthetic
-observations. It does not mirror twice or remap the saved pointer range.
-`tracking_quality` is included on every state. On loss or rejection it is zero;
-speeds and stability are also zero while pointer and closure retain their last
-values. Before first detection the pointer is (0.5, 0.5) and closure is zero.
-Consumers must honor `tracking_ok`, even when retained closure is nonzero.
-Local diagnostic text is available as `pipeline.reason`, not a shared field.
+Both commands read `camera.index`, `camera.mirror` and `camera.target_fps`
+from `config.yaml`. `--config PATH` selects another configuration and `--camera N`
+overrides its camera index. FPS is a best-effort device request, not a throughput
+promise. `mirror: false` is rejected because the shared V2 coordinates must be
+mirrored. No second mirror should be applied by the consumer.
 
-Timestamps are host monotonic integer milliseconds. Coordinates are normalized
-and derivatives are per second. Out-of-order observations are marked invalid
-and reset motion history; camera callers must supply increasing timestamps.
+For B/D integration, with `PYTHONPATH=src`:
+
+```python
+from ghostgrip.vision.camera import LiveHandSource
+
+with LiveHandSource() as source:
+    for state in source:
+        if state.tracking_ok:
+            consume(state)  # Replace with simulator/predictor call.
+        else:
+            pause_interaction()  # Replace with consumer's loss handler.
+```
+
+The default profile is `data/local/calibration.json`; pass `profile_path=` or a
+profile dictionary as the first argument to use another calibration. Keep the
+context manager: it releases camera/model resources on early break or errors.
+Startup failures raise. A capture/detection failure emits one final lost state,
+closes resources, then ends iteration (`read()` returns `None`). Missing hands
+produce lost states but do not end acquisition. Consumers must stop interaction
+on loss, EOF, exceptions and their own exit. This source sends no actuator commands.
+The CLI returns a nonzero exit code for source failures.
+
+On loss or rejection, tracking quality, speeds and stability are zero; pointer
+and closure retain their last values. Before first detection the pointer is
+(0.5, 0.5) and closure is zero. Consumers must honor `tracking_ok` even when
+retained closure is nonzero. Local diagnostic text is `source.reason`.
+
+Timestamps are strictly increasing host monotonic integer milliseconds.
+Coordinates are normalized and derivatives are per second. The saved reach
+`pointer_range` is not remapped; consumers use the existing full-frame coordinates.
+`PerceptionPipeline.update` and `stream` remain available for supplied landmark
+observations, including synthetic inputs, without owning a camera.
+
+The preview uses the same `CameraTracker` acquisition code. Its new timing scope
+includes image wrapping plus detection, excluding capture, color conversion,
+rendering and smoothing delay. FPS includes the preview loop.
+
+### Remaining live/integration checks
+
+- Verify the refactored preview with the actual camera: move left/right,
+  open/pinch, hide the hand and restore it. Repeat the 20-second measurement.
+- Close the preview, then verify the terminal source stops after 150 states.
+- B/D connect their simulator/predictor to the source and honor tracking loss.
+  For CSV replay, use `read_trace` or map the column names below; consumers that
+  expect legacy `x/y/q/vx/vy` columns need an explicit adapter.
+- Submit Member A's branch for review after these checks. Hardware and combined
+  end-to-end validation remain team integration tasks.
 
 ## Local trace recording
 
-Run `python vision_preview.py --record` after calibration. Recording starts when
+Run `.venv/bin/python vision_preview.py --record` after calibration. Recording starts when
 the preview opens; press Q to stop. It stores a unique CSV under `data/local/`,
 including loss states and full-precision shared values before display rounding.
 No video or images are stored. The folder is gitignored; do not commit real hand
