@@ -107,6 +107,7 @@ class AIConfig:
     grip_confirm_frames: int
     adapt_alpha: float
     low_confidence_behavior: str
+    freeze_adaptation: bool
 
 
 @dataclass(frozen=True)
@@ -198,7 +199,7 @@ def parse_config(data):
                                   _int(s['physics_hz'], 'simulation.physics_hz', 10, 240))
 
     a = _section(data, 'ai', ('prediction_horizon_ms', 'grip_confirm_frames', 'adapt_alpha',
-                              'low_confidence_behavior'))
+                              'low_confidence_behavior', 'freeze_adaptation'))
     behavior = a['low_confidence_behavior']
     if behavior not in LOW_CONFIDENCE_BEHAVIORS:
         raise ConfigError(f'ai.low_confidence_behavior must be one of {LOW_CONFIDENCE_BEHAVIORS}, '
@@ -208,7 +209,7 @@ def parse_config(data):
         raise ConfigError('ai.adapt_alpha must be greater than 0')
     ai = AIConfig(_int(a['prediction_horizon_ms'], 'ai.prediction_horizon_ms', 10, 500),
                   _int(a['grip_confirm_frames'], 'ai.grip_confirm_frames', 1, 30),
-                  alpha, behavior)
+                  alpha, behavior, _bool(a['freeze_adaptation'], 'ai.freeze_adaptation'))
 
     e = _section(data, 'experiment', ('save_raw_video', 'participant_id'))
     participant = _text(e['participant_id'], 'experiment.participant_id')

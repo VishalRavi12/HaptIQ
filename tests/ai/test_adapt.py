@@ -275,6 +275,49 @@ class TestSetup(unittest.TestCase):
                 profile_from_dict(bad, c)
 
 
+class TestFrozenByConfig(unittest.TestCase):
+    def config(self, freeze):
+        import copy
+        import yaml
+        from ghostgrip import config as C
+        data = copy.deepcopy(yaml.safe_load(C.DEFAULT_PATH.read_text()))
+        data["ai"]["freeze_adaptation"] = freeze
+        return C.parse_config(data)
+
+    def test_the_committed_settings_start_the_policy_frozen(self):
+        from ghostgrip.config import load_config
+        policy = AssistPolicy.from_config(load_config())
+        self.assertTrue(policy.frozen)
+        before = policy.profile
+        policy.end_trial(outcome(1), 0.004)
+        self.assertEqual((policy.profile, policy.updates), (before, 0))
+
+    def test_practice_mode_lets_it_learn(self):
+        policy = AssistPolicy.from_config(self.config(False))
+        self.assertFalse(policy.frozen)
+        before = policy.profile
+        policy.end_trial(outcome(1), 0.004)
+        self.assertNotEqual(policy.profile, before)
+
+    def test_the_apps_own_pipeline_comes_out_frozen_and_does_not_learn(self):
+        # The app builds its policy through from_config, so a measured run cannot drift by accident.
+        from ghostgrip.config import load_config
+        from ghostgrip.ui.integration import AIPipeline
+        ai = AIPipeline(load_config(), "glass")
+        before = ai.policy.profile
+        ai.end_trial(outcome(1))
+        self.assertTrue(ai.policy.frozen)
+        self.assertEqual(ai.policy.profile, before)
+
+    def test_the_apps_pipeline_learns_only_when_the_setting_says_practice(self):
+        from ghostgrip.ui.integration import AIPipeline
+        ai = AIPipeline(self.config(False), "glass")
+        ai.trial_states = [hand(t=i * 33, x=0.3 + 0.003 * i + (0.004 if i % 2 else 0.0)) for i in range(20)]
+        before = ai.policy.profile
+        ai.end_trial(outcome(1))
+        self.assertNotEqual(ai.policy.profile, before)
+
+
 class TestTrialJitter(unittest.TestCase):
     def line(self, n=20, step=33, noise=None):
         rng = random.Random(3)

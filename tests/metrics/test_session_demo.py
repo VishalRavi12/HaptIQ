@@ -104,6 +104,49 @@ class TestReportCommand(unittest.TestCase):
             self.assertEqual(code2, 0)
             self.assertIn("SYNTHETIC", text2)
 
+    def make_participant(self, folder, session_id, success=True):
+        from contracts import TrialOutcome
+        from ghostgrip.metrics.logger import SessionLogger
+        with SessionLogger(folder, session_id, "real") as log:
+            log.begin_trial(1, "A", 0)
+            log.end_trial(TrialOutcome(session_id, 1, "A", success, "" if success else "timeout", 0, 5000))
+
+    def test_several_participants_get_a_table_each_and_a_combined_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.make_participant(Path(tmp) / "P01", "P01", True)
+            self.make_participant(Path(tmp) / "P02", "P02", False)
+            code, text = self.run_report([str(Path(tmp) / "P01"), str(Path(tmp) / "P02")])
+        self.assertEqual(code, 0)
+        self.assertIn("SESSION P01", text)
+        self.assertIn("SESSION P02", text)
+        self.assertIn("ALL 2 SESSIONS TOGETHER", text)
+        self.assertIn("descriptive only", text)
+        combined = text.split("ALL 2 SESSIONS TOGETHER")[1]
+        self.assertIn("50%", combined)                       # one success, one timeout: not merged into one trial
+
+    def test_a_single_session_has_no_combined_section(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.make_participant(Path(tmp) / "P01", "P01")
+            code, text = self.run_report([str(Path(tmp) / "P01")])
+        self.assertEqual(code, 0)
+        self.assertNotIn("TOGETHER", text)
+        self.assertNotIn("=====", text)
+
+    def test_two_folders_with_the_same_session_id_are_refused_not_merged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.make_participant(Path(tmp) / "a", "P01", True)
+            self.make_participant(Path(tmp) / "b", "P01", False)
+            code, text = self.run_report([str(Path(tmp) / "a"), str(Path(tmp) / "b")])
+        self.assertEqual(code, 1)
+        self.assertIn("appears in both", text)
+
+    def test_one_bad_folder_among_several_stops_with_a_message(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.make_participant(Path(tmp) / "P01", "P01")
+            code, text = self.run_report([str(Path(tmp) / "P01"), str(Path(tmp) / "missing")])
+        self.assertEqual(code, 1)
+        self.assertIn("no trials.csv", text)
+
     def test_a_missing_or_empty_session_is_reported_not_crashed(self):
         with tempfile.TemporaryDirectory() as tmp:
             code, text = self.run_report([tmp])

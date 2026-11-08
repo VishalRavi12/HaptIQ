@@ -34,6 +34,19 @@ class TestCommittedFile(unittest.TestCase):
         self.assertEqual(cfg.ai.prediction_horizon_ms, 120)
         self.assertEqual(cfg.hardware.baud, 115200)
 
+    def test_adaptation_is_frozen_in_the_committed_file(self):
+        self.assertTrue(load_config().ai.freeze_adaptation)
+
+    def test_freeze_adaptation_must_be_a_real_boolean(self):
+        for bad in ("yes", 1, 0, None, "false"):
+            data = good()
+            data["ai"]["freeze_adaptation"] = bad
+            with self.subTest(value=bad), self.assertRaises(ConfigError):
+                parse_config(data)
+        data = good()
+        data["ai"]["freeze_adaptation"] = False
+        self.assertFalse(parse_config(data).ai.freeze_adaptation)
+
     def test_servo_is_off_and_unverified_in_the_committed_file(self):
         hw = load_config().hardware
         self.assertFalse(hw.servo_enabled)

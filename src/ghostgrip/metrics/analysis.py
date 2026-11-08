@@ -57,26 +57,28 @@ def _int(text: str, default: Optional[int] = None) -> Optional[int]:
 
 def trial_records(rows: Iterable[Dict[str, str]]) -> List[TrialRecord]:
     """Merge trials.csv event rows (start / end / incomplete) into one record per trial."""
-    started: Dict[Tuple[int, int], Dict[str, str]] = {}
-    done: Dict[Tuple[int, int], TrialRecord] = {}
+    # A trial is identified by its session, run and id together: ids restart in every run and every
+    # participant's session, so anything less would merge different people's trials into one.
+    started: Dict[Tuple[str, int, int], Dict[str, str]] = {}
+    done: Dict[Tuple[str, int, int], TrialRecord] = {}
     for row in rows:
-        key = (int(row["run"]), int(row["trial_id"]))
+        key = (row["session_id"], int(row["run"]), int(row["trial_id"]))
         event = row["event"]
         if event == "start":
             started[key] = row
         elif event == "end":
             done[key] = TrialRecord(
-                key[0], row["session_id"], row["origin"], key[1], row["condition"], "complete",
+                key[1], row["session_id"], row["origin"], key[2], row["condition"], "complete",
                 row["success"] == "1", row["fail_reason"], _int(row["start_ms"]), _int(row["end_ms"]),
                 _int(row["slip_count"], 0), _int(row["overgrip_count"], 0))
             started.pop(key, None)
         elif event == "incomplete":
             base = started.pop(key, None) or row
             done[key] = TrialRecord(
-                key[0], row["session_id"], row["origin"], key[1], row["condition"], "incomplete",
+                key[1], row["session_id"], row["origin"], key[2], row["condition"], "incomplete",
                 False, row["fail_reason"] or "interrupted", _int(base["t_ms"]), None, 0, 0)
     for key, row in started.items():             # never closed, never recovered: still incomplete
-        done[key] = TrialRecord(key[0], row["session_id"], row["origin"], key[1], row["condition"],
+        done[key] = TrialRecord(key[1], row["session_id"], row["origin"], key[2], row["condition"],
                                 "incomplete", False, "interrupted", _int(row["t_ms"]), None, 0, 0)
     return [done[k] for k in sorted(done)]
 
