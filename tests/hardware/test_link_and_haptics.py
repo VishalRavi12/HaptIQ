@@ -7,7 +7,7 @@ from ghostgrip.hardware.haptics import (ConfigError, HapticPolicy, LED_ONLY_ANGL
                                         validate_config)
 from ghostgrip.hardware.mock_arduino import MockArduino
 from ghostgrip.hardware.protocol import Ack, Err
-from ghostgrip.hardware.serial_link import SerialLink
+from ghostgrip.hardware.serial_link import SerialLink, find_port
 
 
 class FakeClock:
@@ -174,6 +174,23 @@ class TestLinkReviewFindings(unittest.TestCase):
     def test_nan_confidence_is_rejected(self):
         policy = HapticPolicy()
         self.assertEqual(policy.filter(1, 'CONTACT', float('nan'), True).reason, 'LOW_CONFIDENCE')
+
+
+class TestFindPort(unittest.TestCase):
+    def port(self, device, vid):
+        return type('Port', (), {'device': device, 'vid': vid})()
+
+    def test_picks_the_metro_and_skips_a_pico_power_adapter(self):
+        ports = [self.port('/dev/cu.usbmodem1101', 0x2E8A),       # Pico, listed first
+                 self.port('/dev/cu.usbserial-02860253', 0x10C4)]  # Metro (CP2104)
+        self.assertEqual(find_port(ports), '/dev/cu.usbserial-02860253')
+
+    def test_only_a_pico_means_no_board(self):
+        self.assertIsNone(find_port([self.port('/dev/cu.usbmodem1101', 0x2E8A)]))
+
+    def test_genuine_uno_on_usbmodem_still_found(self):
+        self.assertEqual(find_port([self.port('/dev/cu.usbmodem14201', 0x2341)]),
+                         '/dev/cu.usbmodem14201')
 
 
 class TestSharedContracts(unittest.TestCase):
