@@ -15,7 +15,7 @@ const int SERVO_PIN     = 9;   // TowerPro SG-5010 signal only; needs its own 4.
 // so the emergency STOP button is active. Until then, STOP is only available over serial.
 // (The #ifndef lets the Wokwi simulator turn it on without editing this file.)
 #ifndef BUTTON_CONNECTED
-#define BUTTON_CONNECTED 0
+#define BUTTON_CONNECTED 1   // Grove Button on D3, connected 2026-11-08
 #endif
 
 // Servo stays electrically idle until it has passed the hardware safety gate (plan section 8).
