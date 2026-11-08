@@ -36,9 +36,11 @@ Last updated: 2026-11-07. Only observed facts; nothing here is a measured perfor
 - [x] Travel tested unloaded within the 80-100 degree window (2026-11-08); window not widened
 - [x] Emergency stop button tested mid-cue (2026-11-08): pressed during continuous 80/100 degree swings, board disarmed, then ARM refused LATCHED and CUE refused until STOP
 - [x] Watchdog, STOP, latch and command rejection tested on the real Metro (LED path, 2026-11-07)
-- [ ] Neutral state tested with the servo attached
+- [x] Neutral state tested with the horn attached (2026-11-08): armed and held at 90 degrees for 5 s, and for 3 s after 4 swings; no creep, twitch or buzz (observed by Sindhu and Vishal). Servo is on a table stand, not on a person
 - [x] 10 repeated cycles without heat or noise (2026-11-08: 20/20 moves acknowledged; case cool and quiet by touch afterwards)
-- [ ] Second team member observes first trial
+- [x] Second team member observes first trial (2026-11-08: Sindhu and Vishal watched the neutral hold and 4 swings at 80-100 degrees: small, controlled, no twitch or buzz)
+
+**Servo decision (C4, 2026-11-08): GO for the non-contact table demo** inside the 80-100 degree window, with the Pico on a wall USB port. It still must not touch a person: the band was cut from the final plan, so the finger-safety item above has not been tested.
 
 No human contact with the servo until every box is checked.
 
