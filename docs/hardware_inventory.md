@@ -1,0 +1,46 @@
+# Hardware inventory and bring-up log (Member C)
+
+Last updated: 2026-11-07. Only observed facts; nothing here is a measured performance number.
+
+## Confirmed parts
+| Part | Details | Notes |
+|---|---|---|
+| Board | Adafruit Metro 328 (ATmega328, CP2104 USB) | 5V logic; program as `arduino:avr:uno`; macOS port `/dev/cu.usbserial-*` |
+| Shield | Grove Base Shield V2 | Power switch set to **5V** |
+| Servo | TowerPro SG-5010 "DiGi hi-Speed" | Standard size, 4.8-6V (datasheet to confirm). Cross horn fitted, no screw (bundled screws did not fit; ask for an M3 horn screw) |
+| Kit adapter | MOSO MSP-C2000IC12.0-24W, **12V 2A**, barrel plug | **Never connect to the servo.** Only usable on the Metro DC jack |
+| Kit | Grove Starter Kit Plus, IoT Edition | Several Grove cables missing; borrowed |
+
+## Module bring-up
+| Module | Socket | Result |
+|---|---|---|
+| Built-in LED (blink) | pin 13 | Works: upload path proven |
+| LED Socket Kit (red LED for now) | D4 | Works. Swap to green later; red goes to D5 |
+| Touch Sensor v1.1 | D2 | Works: touch and release detected exactly |
+| Piezo Vibration Sensor + MEAS film | D6 (film in J1) | Works after turning **R6 clockwise**; before that it reported vibration continuously |
+| Button | D3 | Not yet connected. Firmware flag `BUTTON_CONNECTED` is 0 until it is |
+| Buzzer, rotary, accelerometer, LCD | D7, A0, I2C | Not yet tested |
+| Servo | D9 | **Not powered.** Waiting for a 4.8-6V supply, male-to-male jumpers and a multimeter. Firmware flag `SERVO_ENABLED` is 0 |
+
+## Safety gate status (plan section 8)
+- [x] Servo model identified (SG-5010, standard positional servo)
+- [ ] Supply voltage and current measured
+- [x] 12V kit adapter NOT wired to the servo
+- [ ] Grounds shared with external supply
+- [ ] Travel tested unloaded; firmware window is 80-100 degrees until then
+- [ ] Emergency stop button tested mid-cue
+- [x] Watchdog, STOP, latch and command rejection tested on the real Metro (LED path, 2026-11-07)
+- [ ] Neutral state tested with the servo attached
+- [ ] 10 repeated cycles without heat or noise
+- [ ] Second team member observes first trial
+
+No human contact with the servo until every box is checked.
+
+## Protocol notes for the team
+Member C added two rules on top of plan section 6.3, after code review found real safety gaps:
+- `KA,seq` is the keepalive. It refreshes the watchdog but can never arm the board. Send it at
+  least every 250 ms while armed; `ARM` is only for an explicit arm.
+- After the STOP button, a watchdog timeout or repeated bad packets the board is **latched**:
+  `ARM` replies `ERR,seq,LATCHED` until the host sends `STOP` first.
+- `STOP` is always obeyed, even with a stale or unreadable sequence number.
+- Only `CONTACT` cues move the servo; `STABLE_HOLD`, `SLIP` and `DAMAGE` are lights only.
