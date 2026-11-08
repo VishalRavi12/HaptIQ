@@ -240,6 +240,18 @@ class TestErrorTracker(unittest.TestCase):
         self.assertEqual(run(0.01), 0.0)        # 2 sigma = 0.02 does not
         self.assertTrue(math.isnan(ErrorTracker().calibration()))
 
+    def test_the_mean_claimed_uncertainty_is_tracked(self):
+        s = self.perfect_run().summary()                 # every forecast claims sigma 0.01
+        self.assertAlmostEqual(s["mean_sigma"], 0.01)
+        self.assertTrue(math.isnan(ErrorTracker().mean_sigma()))
+
+    def test_the_larger_axis_is_the_claimed_uncertainty(self):
+        tracker = ErrorTracker()
+        for i in range(10):
+            t = i * 30
+            tracker.record(hand(t, 0.5), Prediction(t, 60, (0.5, 0.5), (0.01, 0.04)))
+        self.assertAlmostEqual(tracker.mean_sigma(), 0.04)
+
     def test_bad_tracker_parameters_are_rejected(self):
         for kwargs in ({"window": 0}, {"capacity": 0}, {"max_bracket_ms": 0}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):

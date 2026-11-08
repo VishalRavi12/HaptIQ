@@ -10,8 +10,8 @@ that the modules fit together, not an experiment.
 import argparse
 from pathlib import Path
 
-from .analysis import (format_summary, load_frame_rows, load_trial_records, plot_success_rates,
-                       prediction_error, summarize_trials, write_summary_csv)
+from .analysis import (assist_availability, format_summary, load_frame_rows, load_trial_records,
+                       plot_success_rates, prediction_error, summarize_trials, write_summary_csv)
 
 
 def main(argv=None) -> int:
@@ -41,7 +41,8 @@ def main(argv=None) -> int:
     if not summaries:
         print("the session has no trials yet")
         return 1
-    print(format_summary(summaries, prediction_error(load_frame_rows(folder))))
+    frames = load_frame_rows(folder)
+    print(format_summary(summaries, prediction_error(frames), assist_availability(frames)))
     if args.csv:
         write_summary_csv(args.csv, summaries)
         print(f"summary table written to {args.csv}")
