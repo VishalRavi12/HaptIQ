@@ -52,6 +52,27 @@ class TestTrialRecords(unittest.TestCase):
         self.assertTrue(rec(4, success=False, reason="timeout").valid)       # a real failure
 
 
+class TestTrialsFromDifferentSessionsStayApart(unittest.TestCase):
+    def row(self, session, trial, event, run="0", condition="A", success="", reason="", start="", end=""):
+        return dict(run=run, session_id=session, origin="real", trial_id=str(trial), condition=condition,
+                    event=event, t_ms=end or start or "0", success=success, fail_reason=reason,
+                    start_ms=start, end_ms=end, slip_count="0" if event == "end" else "",
+                    overgrip_count="0" if event == "end" else "")
+
+    def test_the_same_run_and_trial_id_in_two_sessions_are_two_trials(self):
+        # Regression: trials were keyed by (run, trial_id) only, so two participants' trial 1 became one.
+        rows = [self.row("P01", 1, "start", start="0"), self.row("P01", 1, "end", success="1", start="0", end="4000"),
+                self.row("P02", 1, "start", start="0"), self.row("P02", 1, "end", success="0", reason="timeout", start="0", end="30000")]
+        records = trial_records(rows)
+        self.assertEqual(sorted((r.session_id, r.success) for r in records), [("P01", True), ("P02", False)])
+
+    def test_an_interrupted_trial_in_one_session_does_not_hide_anothers(self):
+        rows = [self.row("P01", 1, "start", start="0"),
+                self.row("P02", 1, "start", start="0"), self.row("P02", 1, "end", success="1", start="0", end="5000")]
+        by = {r.session_id: r.status for r in trial_records(rows)}
+        self.assertEqual(by, {"P01": "incomplete", "P02": "complete"})
+
+
 class TestSummaries(unittest.TestCase):
     def test_rates_use_valid_trials_only_and_invalid_ones_are_still_counted(self):
         trials = [rec(1, start=0, end=4000), rec(2, start=0, end=6000), rec(3, start=0, end=5000),

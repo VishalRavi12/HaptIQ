@@ -275,6 +275,43 @@ class TestSetup(unittest.TestCase):
                 profile_from_dict(bad, c)
 
 
+class TestFrozenByConfig(unittest.TestCase):
+    def config(self, freeze):
+        import copy
+        import yaml
+        from ghostgrip import config as C
+        data = copy.deepcopy(yaml.safe_load(C.DEFAULT_PATH.read_text()))
+        data["ai"]["freeze_adaptation"] = freeze
+        return C.parse_config(data)
+
+    def test_the_committed_settings_leave_the_policy_free_to_learn(self):
+        # The app freezes it for a measured run with --evaluation (tests/simulation/test_app_lifecycle.py).
+        from ghostgrip.config import load_config
+        policy = AssistPolicy.from_config(load_config())
+        self.assertFalse(policy.frozen)
+        before = policy.profile
+        policy.end_trial(outcome(1), 0.004)
+        self.assertNotEqual(policy.profile, before)
+
+    def test_the_setting_freezes_it_from_the_start(self):
+        policy = AssistPolicy.from_config(self.config(True))
+        self.assertTrue(policy.frozen)
+        before = policy.profile
+        policy.end_trial(outcome(1), 0.004)
+        self.assertEqual((policy.profile, policy.updates), (before, 0))
+
+    def test_the_apps_own_pipeline_follows_the_setting(self):
+        from ghostgrip.ui.integration import AIPipeline
+        for freeze in (True, False):
+            with self.subTest(freeze=freeze):
+                ai = AIPipeline(self.config(freeze), "glass")
+                ai.trial_states = [hand(t=i * 33, x=0.3 + 0.003 * i + (0.004 if i % 2 else 0.0)) for i in range(20)]
+                before = ai.policy.profile
+                ai.end_trial(outcome(1))
+                self.assertEqual(ai.policy.frozen, freeze)
+                self.assertEqual(ai.policy.profile != before, not freeze)
+
+
 class TestTrialJitter(unittest.TestCase):
     def line(self, n=20, step=33, noise=None):
         rng = random.Random(3)

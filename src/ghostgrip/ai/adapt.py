@@ -157,8 +157,15 @@ class AssistPolicy:
 
     @classmethod
     def from_config(cls, config) -> "AssistPolicy":
-        """Use ai.adapt_alpha from a loaded ghostgrip.config.Config."""
-        return cls(AdaptationConfig(alpha=config.ai.adapt_alpha))
+        """Use ai.adapt_alpha and ai.freeze_adaptation from a loaded ghostgrip.config.Config.
+
+        The committed setting is false: the profile learns between trials unless something freezes
+        it. A measured run is frozen by the app's --evaluation flag (plan 4.5: nothing may learn
+        while a condition is measured); setting ai.freeze_adaptation to true freezes it from the
+        start for any run."""
+        policy = cls(AdaptationConfig(alpha=config.ai.adapt_alpha))
+        policy.frozen = config.ai.freeze_adaptation
+        return policy
 
     # ------------------------------------------------------------------ every frame
     def decide(self, hand: HandStateV2, prediction: Prediction,

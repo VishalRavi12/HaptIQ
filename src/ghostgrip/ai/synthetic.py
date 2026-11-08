@@ -35,7 +35,7 @@ DEFAULT_FPS = 30
 # tests/ai/test_synthetic.py replays the clean trace through the real World to keep this honest.
 GLASS_XY = (200 / 960, 420 / 540)
 TARGET_X = 835 / 960
-GRASP_Q = 0.50       # glass holds at q >= 0.40 and breaks above 0.60 (simulation/objects.py)
+GRASP_Q = 0.50       # glass holds at q >= 0.40 and breaks only above 0.82 (simulation/objects.py)
 
 Keyframes = Sequence[Tuple[float, float]]
 
