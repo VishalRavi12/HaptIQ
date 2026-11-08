@@ -19,7 +19,8 @@ Last updated: 2026-11-07. Only observed facts; nothing here is a measured perfor
 | Touch Sensor v1.1 | D2 | Works: touch and release detected exactly |
 | Piezo Vibration Sensor + MEAS film | D6 (film in J1) | Works after turning **R6 clockwise**; before that it reported vibration continuously |
 | Grove Button | D3 | Works (2026-11-08): every press disarms and latches; ARM refused while held. `BUTTON_CONNECTED` is 1 |
-| Buzzer, rotary, accelerometer, LCD | D7, A0, I2C | Not yet tested |
+| Grove Buzzer | D7 | Works (2026-11-08): 3 SLIP + 1 DAMAGE cues from the laptop gave 4 short beeps (heard by the operator). Beep is 120 ms, only on accepted SLIP/DAMAGE cues; STOP, button, fault and watchdog silence it (mock tests). Disable with `BUZZER_ENABLED 0` |
+| Rotary, accelerometer, LCD | A0, I2C | Not tested (cut from the final plan) |
 | Servo | D9 (shield header: 9th hole from the SCL end, verified with a pin-check sketch) | Works unloaded (2026-11-08). Powered from a Raspberry Pi Pico H used only as a 5V USB adapter (pin 40 VBUS / pin 38 GND to the breadboard rails), ground shared with the Metro. `SERVO_ENABLED` is 1 |
 
 ## Safety gate status (plan section 8)

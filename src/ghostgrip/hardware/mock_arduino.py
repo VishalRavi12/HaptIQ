@@ -2,7 +2,7 @@
 
 It mirrors the firmware rule for rule: boots DISARMED, STOP always wins, ARM needs STOP first
 after a latch, stale or malformed commands are rejected, only CONTACT moves the servo, and the
-watchdog faults if the host goes quiet. Keep the two in step when either changes.
+watchdog faults if the host goes quiet. SLIP and DAMAGE beep briefly; STOP and faults silence it. Keep the two in step when either changes.
 Behaves like a pyserial port: write(bytes), readline() -> bytes (b'' means timeout), in_waiting.
 """
 from collections import deque
@@ -11,12 +11,14 @@ import time
 WATCHDOG_MS = 500
 CUE_COOLDOWN_MS = 500
 MAX_CUE_MS = 500
+BEEP_MS = 120
 MAX_LINE = 48
 MAX_FIELDS = 5
 MAX_NUMBER = 100_000_000
 MAX_BAD_PACKETS = 5
 SERVO_MIN_DEG, SERVO_MAX_DEG, SERVO_NEUTRAL_DEG = 80, 100, 90
 CUE_EVENTS = {'CONTACT', 'STABLE_HOLD', 'SLIP', 'DAMAGE'}
+BEEP_EVENTS = {'SLIP', 'DAMAGE'}
 
 
 def _number(text):
@@ -38,6 +40,8 @@ class MockArduino:
         self.last_cue_start_ms = None
         self.cue_end_ms = 0
         self.servo_angle = SERVO_NEUTRAL_DEG
+        self.buzzer_on = False
+        self.beep_end_ms = 0
         self.button_held = False
         self.touch = False
         self.piezo = False
@@ -86,8 +90,11 @@ class MockArduino:
         if self.armed() and now - self.last_host_ms > WATCHDOG_MS:
             self._disarm('FAULT')
             self.latched = True
+        if self.buzzer_on and now >= self.beep_end_ms:
+            self.buzzer_on = False
         if self.state == 'CUE' and now >= self.cue_end_ms:
             self.servo_angle = SERVO_NEUTRAL_DEG
+            self.buzzer_on = False
             self.state = 'ARMED'
 
     def press_button(self, held=False):
@@ -105,6 +112,7 @@ class MockArduino:
 
     def _disarm(self, next_state):
         self.servo_angle = SERVO_NEUTRAL_DEG
+        self.buzzer_on = False
         self.state = next_state
 
     def _ack(self, seq):
@@ -205,6 +213,9 @@ class MockArduino:
             self.state = 'CUE'
             if event == 'CONTACT':
                 self.servo_angle = angle
+            if event in BEEP_EVENTS:
+                self.buzzer_on = True
+                self.beep_end_ms = now + min(duration, BEEP_MS)
             self.bad_packets = 0
             self._ack(seq)
             return
