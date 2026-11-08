@@ -50,6 +50,10 @@ first and then the rest of the command.
 | Calibrate, then live hand preview | `python vision_preview.py --calibrate`, then `python vision_preview.py` | camera, hand model |
 | Live hand states without a window (add `--record` to save numbers, never images) | `PYTHONPATH=src python -m ghostgrip.vision.cli --frames 150` | camera, hand model |
 | Real Arduino | `PYTHONPATH=src python -m ghostgrip.hardware.cli cue CONTACT` | the board, USB data cable |
+| The whole loop, live camera, fake board | `python src/ghostgrip/ui/app.py --camera --hardware mock --condition B --session-id me01` | camera, hand model, calibration |
+| Record your hand (numbers, never images) | `PYTHONPATH=src python -m ghostgrip.vision.cli --frames 600 --record` | camera, hand model, calibration |
+| How do the predictor and assistance do on a recording? | `PYTHONPATH=src python -m ghostgrip.metrics.trace_report data/local/trace_XXXX.csv --sweep` | a recording |
+| Results of a logged session | `PYTHONPATH=src python -m ghostgrip.metrics.report data/local/sessions/me01` | a session folder |
 
 Results from `ghostgrip.metrics.report` are labelled **synthetic** and are a pipeline check, not an experiment.
 Add `--csv summary.csv` or `--plot success.png` to export them.
@@ -63,10 +67,28 @@ Add `--csv summary.csv` or `--plot success.png` to export them.
 | Hardware: firmware, serial link, safety policy, mock board | Built and tested with the mock. Its author reports (2026-11-08) that the stop button and the servo were tried on a real board, **unloaded and inside an 80-100 degree window**: 17 of 17 button presses disarmed it, and stop worked mid-cue. Three items are still open in `docs/hardware_inventory.md`: the servo's supply voltage has **not been measured** (5 V is assumed), its neutral position has not been checked on its mount, and a second person has not watched a first trial. **No servo should touch a person until all three are done.** |
 | AI core: predictor, grasp intent, bounded adaptation | Built and tested on **synthetic traces only**. The predictor beats the baselines while the hand moves and loses for a parked, jittery hand. |
 | Settings, CI, logging and results, preflight | Built and tested. |
-| Everything running together on a live camera | **Not done.** `ui/app.py` still uses a stand-in predictor and a hand-set assistance gain, and nothing in the app sends the hardware keepalive yet; wiring in the real predictor, intent, adaptation, logger and hardware is the next step. |
+| Everything running together (camera, AI, simulation, logger, hardware link) | **Wired and run headless** on the synthetic traces with the mock board (`ui/app.py --replay clean --hardware mock`). **Not done:** a live camera with real people, the real board in the loop, and the four-condition comparison. Open: the assistance profile is not yet frozen during a measured run. |
 | Real-user data and the four-condition comparison | **Not done.** Nothing here supports a claim about real people. |
 
 The four conditions are A baseline, B AI only, C haptic only, D AI and haptic.
+
+## Try it on your own laptop (real hand, no one else needed)
+
+Nothing here sends anything anywhere; recordings hold numbers only and stay in `data/local/`.
+
+```
+python download_hand_model.py                        # once; needs internet
+python scripts/preflight.py                          # camera, model, calibration: what is still missing?
+python vision_preview.py --calibrate                 # 20 s: open hand, pinch, reach, release
+PYTHONPATH=src python -m ghostgrip.vision.cli --frames 600 --record      # about 20 s of your hand
+PYTHONPATH=src python -m ghostgrip.metrics.trace_report data/local/trace_XXXX.csv --sweep
+python src/ghostgrip/ui/app.py --camera --hardware mock --condition B --session-id me01
+PYTHONPATH=src python -m ghostgrip.metrics.report data/local/sessions/me01
+```
+
+`trace_report` says in plain words whether the predictor beats the two baselines on your recording, how often
+assistance would have been on, and how its settings behave. One recording of one person is a check, not
+evidence; keep it apart from the synthetic results.
 
 ## Repository layout
 
@@ -78,7 +100,7 @@ src/ghostgrip/
   ai/synthetic.py  predict.py  intent.py  adapt.py   fake traces, Kalman predictor, grasp states, assistance
   simulation/  ui/                                 virtual objects, trials, replay, Pygame window
   hardware/                                        serial link, safety policy, mock Arduino, CLI
-  metrics/                                         session logging, results, plots, synthetic pipeline run
+  metrics/                                         session logging, results, plots, recorded-trace report, synthetic run
   preflight.py                                     the laptop check
 firmware/ghostgrip_uno/       Arduino firmware (boots disarmed; servo limited to 80-100 degrees; its checklist is still open)
 sim/wokwi/                    browser simulation of the board

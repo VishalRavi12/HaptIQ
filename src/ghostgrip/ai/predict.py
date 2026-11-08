@@ -203,6 +203,7 @@ class ErrorTracker:
         self._recent: Deque[Dict[str, float]] = deque(maxlen=window)
         self._sum = {m: 0.0 for m in METHODS}
         self._inside_2_sigma = 0
+        self._sigma_sum = 0.0
         self.scored = 0
         self.unscorable = 0
 
@@ -250,6 +251,7 @@ class ErrorTracker:
             if (abs(kx - observed[0]) <= 2.0 * pending.sigma[0]
                     and abs(ky - observed[1]) <= 2.0 * pending.sigma[1]):
                 self._inside_2_sigma += 1
+            self._sigma_sum += max(pending.sigma)
             for m, e in errors.items():
                 self._sum[m] += e
             self._recent.append(errors)
@@ -268,6 +270,11 @@ class ErrorTracker:
         near 1.0 with a large sigma means the uncertainty is needlessly cautious."""
         return float("nan") if self.scored == 0 else self._inside_2_sigma / self.scored
 
+    def mean_sigma(self) -> float:
+        """Average claimed uncertainty (the larger axis) over everything scored, normalised units.
+        Compare with the mean error: much larger means the uncertainty is needlessly cautious."""
+        return float("nan") if self.scored == 0 else self._sigma_sum / self.scored
+
     def is_worse_than_baseline(self, min_samples: int = 30, margin: float = 0.0) -> bool:
         """True when, over the recent window, the Kalman error exceeds the better baseline's by
         more than `margin` (a fraction). False when there is not enough data to say. When this
@@ -284,6 +291,7 @@ class ErrorTracker:
         out["scored"] = self.scored
         out["unscorable"] = self.unscorable
         out["within_2_sigma"] = self.calibration()
+        out["mean_sigma"] = self.mean_sigma()
         return out
 
 
