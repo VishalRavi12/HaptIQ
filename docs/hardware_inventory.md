@@ -18,20 +18,20 @@ Last updated: 2026-11-07. Only observed facts; nothing here is a measured perfor
 | LED Socket Kit (red LED for now) | D4 | Works. Swap to green later; red goes to D5 |
 | Touch Sensor v1.1 | D2 | Works: touch and release detected exactly |
 | Piezo Vibration Sensor + MEAS film | D6 (film in J1) | Works after turning **R6 clockwise**; before that it reported vibration continuously |
-| Button | D3 | Not yet connected. Firmware flag `BUTTON_CONNECTED` is 0 until it is |
+| Grove Button | D3 | Works (2026-11-08): every press disarms and latches; ARM refused while held. `BUTTON_CONNECTED` is 1 |
 | Buzzer, rotary, accelerometer, LCD | D7, A0, I2C | Not yet tested |
-| Servo | D9 | **Not powered.** Waiting for a 4.8-6V supply, male-to-male jumpers and a multimeter. Firmware flag `SERVO_ENABLED` is 0 |
+| Servo | D9 (shield header: 9th hole from the SCL end, verified with a pin-check sketch) | Works unloaded (2026-11-08). Powered from a Raspberry Pi Pico H used only as a 5V USB adapter (pin 40 VBUS / pin 38 GND to the breadboard rails), ground shared with the Metro. `SERVO_ENABLED` is 1 |
 
 ## Safety gate status (plan section 8)
 - [x] Servo model identified (SG-5010, standard positional servo)
-- [ ] Supply voltage and current measured
+- [ ] Supply voltage and current measured (no multimeter yet; USB VBUS assumed 5V)
 - [x] 12V kit adapter NOT wired to the servo
-- [ ] Grounds shared with external supply
-- [ ] Travel tested unloaded; firmware window is 80-100 degrees until then
-- [ ] Emergency stop button tested mid-cue
+- [x] Grounds shared with external supply (Metro GND to the breadboard - rail, verified with a pin-check sketch)
+- [x] Travel tested unloaded within the 80-100 degree window (2026-11-08); window not widened
+- [x] Emergency stop button tested mid-cue (2026-11-08): pressed during continuous 80/100 degree swings, board disarmed, then ARM refused LATCHED and CUE refused until STOP
 - [x] Watchdog, STOP, latch and command rejection tested on the real Metro (LED path, 2026-11-07)
 - [ ] Neutral state tested with the servo attached
-- [ ] 10 repeated cycles without heat or noise
+- [x] 10 repeated cycles without heat or noise (2026-11-08: 20/20 moves acknowledged; case cool and quiet by touch afterwards)
 - [ ] Second team member observes first trial
 
 No human contact with the servo until every box is checked.
