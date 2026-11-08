@@ -116,6 +116,24 @@ def open_camera(args, cfg):
     return source
 
 
+def draw_board_overlay(screen, font, bridge, condition):
+    """Make the hardware state impossible to miss: the LED's cue flicker lasts only 150 ms."""
+    if bridge is None or not condition.haptic:
+        return
+    if not bridge.connected:
+        text, color = f"Board {bridge.status}: cues cannot reach the Arduino", (255, 110, 110)
+    elif not bridge.armed:
+        text, color = "Board DISARMED: click this window, then press H", (255, 200, 90)
+    elif bridge.cue_recent():
+        text, color = f"CUE SENT TO BOARD: {bridge.last_cue}", (110, 235, 150)
+    else:
+        return
+    img = font.render(text, True, color)
+    box = img.get_rect(center=(WORLD_W // 2 - CAMERA_VIEW_W // 2, 40)).inflate(20, 10)
+    pygame.draw.rect(screen, (20, 24, 36), box, border_radius=6)
+    screen.blit(img, img.get_rect(center=box.center))
+
+
 def camera_view(frame):
     """Small preview of the (already mirrored) camera image. Shown only, never saved."""
     import cv2
@@ -157,6 +175,7 @@ def main(argv=None) -> int:
     ai = AIPipeline(cfg, world.scene)
     renderer = Renderer2D()
     hud = Hud(WORLD_W, WORLD_H)
+    overlay_font = pygame.font.Font(None, 32)
     condition = CONDITIONS[args.condition]
     adapter = MouseKeyboardAdapter()
     player = TracePlayer.from_csv(replay_path, loop=args.loop) if replay_path else None
@@ -189,7 +208,8 @@ def main(argv=None) -> int:
           f"hardware={bridge.status if bridge else 'off'} "
           f"log={'off' if logger is None else str(log_folder) + ' (' + origin + ')'}")
     if bridge is not None:
-        print("Keys: H = arm the board, X = STOP. Cues are sent only in conditions C and D (F3/F4).")
+        print("Keys (click the GAME window first, keys typed in the terminal do nothing): "
+              "H = arm the board, X = STOP. Cues are sent only in conditions C and D (F3/F4).")
 
     t0 = last = time.monotonic()
     t_ms = 0
@@ -359,6 +379,7 @@ def main(argv=None) -> int:
                     and camera.last_observation.frame is not None:
                 view = camera_view(camera.last_observation.frame)
                 screen.blit(view, (WORLD_W - CAMERA_VIEW_W - 8, 8))
+            draw_board_overlay(screen, overlay_font, bridge, condition)
             trial_state = trial.state
             if trial_state == READY:
                 trial_state = "READY (open hand)"
@@ -373,7 +394,7 @@ def main(argv=None) -> int:
                 intent=f"{intent.state} {intent.object_id or ''}".strip(),
                 assist_source="manual" if manual_gain is not None else "AI",
                 board=bridge.status if bridge else "",
-                board_detail=bridge.last_cue if bridge else ""))
+                board_detail=bridge.hud_detail() if bridge else ""))
             pygame.display.flip()
             clock.tick(args.fps)
             frames += 1

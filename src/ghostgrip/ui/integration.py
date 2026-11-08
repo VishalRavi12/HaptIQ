@@ -110,6 +110,10 @@ class HapticBridge:
         self.clock_ms = clock_ms or (lambda: int(time.monotonic() * 1000))
         self.message = "" if link else "no board: running laptop-only"
         self.last_cue = ""
+        self.last_cue_ms: Optional[int] = None     # when the board last accepted a cue
+        self.packets = 0                            # sensor packets received (proof the link works)
+        self._last_packet_ms: Optional[int] = None
+        self._hinted_not_armed = False
         self._last_ka_ms: Optional[int] = None
         self._last_sample_ms: Optional[int] = None
         self._lost_since: Optional[int] = None
@@ -122,7 +126,9 @@ class HapticBridge:
         policy = HapticPolicy(to_haptic_config(config))
         keepalive = config.hardware.keepalive_ms
         if target.lower() == "mock":
-            return cls(SerialLink(MockArduino()), policy, keepalive, "mock board", clock_ms)
+            bridge = cls(SerialLink(MockArduino()), policy, keepalive, "mock board", clock_ms)
+            bridge.handshake()
+            return bridge
         port = None if target.lower() == "auto" else target
         if port is None and str(config.hardware.port).upper() != "AUTO":
             port = config.hardware.port
@@ -137,8 +143,22 @@ class HapticBridge:
         except Exception as error:   # busy port, unplugged cable, missing driver
             print(f"Hardware: could not open {port}: {error}. Running laptop-only.")
             return cls(None, policy, keepalive, "", clock_ms)
-        print(f"Hardware: connected on {port}. Board is DISARMED; press H to arm.")
-        return cls(SerialLink(transport), policy, keepalive, port, clock_ms)
+        bridge = cls(SerialLink(transport), policy, keepalive, port, clock_ms)
+        bridge.handshake()
+        return bridge
+
+    def handshake(self) -> bool:
+        """Prove the GhostGrip firmware is really there: STOP always gets an ACK and only ever
+        leaves the board DISARMED, so it is the one command that is safe to send blindly."""
+        reply = self.link.stop()
+        if isinstance(reply, Ack):
+            print(f"Hardware: {self.port_label} answered (ACK, status {reply.status}). The board is "
+                  "DISARMED: click the game window, then press H to arm.")
+            return True
+        self.message = "port opened but the GhostGrip firmware did not answer"
+        print(f"Hardware: {self.port_label} opened, but the GhostGrip firmware did not answer. "
+              "Check that this is the Arduino's port (not the Pico) and that the firmware is uploaded.")
+        return False
 
     # ------------------------------------------------------------------ state
     @property
@@ -157,6 +177,24 @@ class HapticBridge:
             return "DISCONNECTED"
         return "ARMED" if self.link.armed else "DISARMED"
 
+    @property
+    def link_alive(self) -> bool:
+        """True while the board's sensor packets (20 per second) keep arriving."""
+        return (self.connected and self._last_packet_ms is not None
+                and self.clock_ms() - self._last_packet_ms <= 1000)
+
+    def cue_recent(self, window_ms: int = 700) -> bool:
+        return self.last_cue_ms is not None and self.clock_ms() - self.last_cue_ms <= window_ms
+
+    def hud_detail(self) -> str:
+        """Short text for the HUD next to the status."""
+        if not self.connected:
+            return ""
+        link = "link OK" if self.link_alive else "no data!"
+        if not self.link.armed:
+            return f"{link}  press H"
+        return f"{link}  {self.last_cue}".rstrip()
+
     # ------------------------------------------------------------------ operator keys
     def arm(self) -> None:
         if not self.connected:
@@ -166,7 +204,8 @@ class HapticBridge:
         if isinstance(reply, Ack) and self.link.armed:
             self._last_ka_ms = self.clock_ms()
             self._lost_since = None
-            self.message = "ARMED (X = STOP)"
+            self._hinted_not_armed = False
+            self.message = "ARMED: LED should now be steady (X = STOP)"
         elif isinstance(reply, Err) and reply.reason == "LATCHED":
             self.message = "ARM refused: board latched. Press X (STOP), then H"
         elif isinstance(reply, Err) and reply.reason == "BUTTON_HELD":
@@ -217,6 +256,8 @@ class HapticBridge:
         if device is None or device is self._last_device:
             return None
         self._last_device = device
+        self.packets += 1
+        self._last_packet_ms = now
         return device
 
     def handle_events(self, events, hand: HandState, haptic_on: bool) -> list:
@@ -234,12 +275,18 @@ class HapticBridge:
             if decision.action != "cue":
                 if decision.reason != "UNMAPPED":       # RELEASE has no cue on purpose
                     print(f"  haptic: {event.kind} not sent ({decision.reason})")
+                if (decision.reason == "NOT_ARMED" and self.connected
+                        and not self._hinted_not_armed):
+                    self._hinted_not_armed = True
+                    print("  -> the board is DISARMED: click the GAME window (not the terminal), "
+                          "then press H")
                 continue
             reply = self.link.cue(decision.cue)
             if isinstance(reply, Ack):
                 cue = dataclasses.replace(decision.cue, seq=self.link.seq)
                 sent.append(cue)
                 self.last_cue = f"{cue.kind} sent"
+                self.last_cue_ms = self.clock_ms()
                 print(f"  haptic: {cue.kind} cue sent (angle {cue.safe_angle_deg}, "
                       f"{cue.duration_ms} ms)")
             else:

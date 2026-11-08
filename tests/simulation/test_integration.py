@@ -169,6 +169,29 @@ class TestHapticBridge(_WithConfig):
         self.assertFalse(board.is_open)
         bridge.close()                                         # safe twice
 
+    def test_handshake_and_link_status_show_the_board_is_really_there(self):
+        clock = FakeClock()
+        bridge, board = self.make_bridge(clock)
+        self.assertTrue(bridge.handshake())                   # STOP is ACKed by the firmware
+        self.assertEqual(board.state, "DISARMED")             # and the handshake never arms
+        hand = trace("clean")[0]
+        for _ in range(10):
+            clock.t += 50
+            bridge.update(hand)
+        self.assertGreater(bridge.packets, 0)
+        self.assertTrue(bridge.link_alive)
+        self.assertIn("press H", bridge.hud_detail())
+        bridge.arm()
+        self.assertNotIn("press H", bridge.hud_detail())
+
+    def test_a_silent_port_is_reported_not_trusted(self):
+        clock = FakeClock()
+        bridge, board = self.make_bridge(clock)
+        board.dead = True                                     # e.g. the Pico's port, or no firmware
+        self.assertFalse(bridge.handshake())
+        self.assertEqual(bridge.status, "DISCONNECTED")
+        self.assertIn("did not answer", bridge.message)
+
     def test_without_a_board_nothing_breaks(self):
         from ghostgrip.config import to_haptic_config
         from ghostgrip.hardware.haptics import HapticPolicy
