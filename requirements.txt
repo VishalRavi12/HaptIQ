@@ -1,5 +1,6 @@
 # Run using a Python 3.11 or 3.12 virtual environment.
 pygame>=2.5,<3
-opencv-python>=4.8,<5
+# MediaPipe needs the contrib build; 4.13+ bundles SDL and clashes with pygame on macOS.
+opencv-contrib-python==4.12.0.88
 mediapipe>=0.10,<0.11
 pyserial>=3.5,<4

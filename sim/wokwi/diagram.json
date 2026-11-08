@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "author": "GhostGrip Member C",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-arduino-uno", "id": "uno", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-servo", "id": "servo", "top": -170, "left": 380, "attrs": {} },
+    { "type": "wokwi-led", "id": "ledGreen", "top": -150, "left": 90, "attrs": { "color": "green", "label": "D4 armed" } },
+    { "type": "wokwi-led", "id": "ledRed", "top": -150, "left": 150, "attrs": { "color": "red", "label": "D5 fault" } },
+    { "type": "wokwi-resistor", "id": "rGreen", "top": -80, "left": 70, "rotate": 90, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "rRed", "top": -80, "left": 130, "rotate": 90, "attrs": { "value": "220" } },
+    { "type": "wokwi-pushbutton", "id": "btnStop", "top": 260, "left": 20, "attrs": { "color": "red", "label": "STOP (D3)" } },
+    { "type": "wokwi-pushbutton", "id": "btnTouch", "top": 260, "left": 140, "attrs": { "color": "blue", "label": "Touch (D2)" } },
+    { "type": "wokwi-pushbutton", "id": "btnPiezo", "top": 260, "left": 260, "attrs": { "color": "yellow", "label": "Piezo (D6)" } },
+    { "type": "wokwi-resistor", "id": "pdStop", "top": 340, "left": 20, "attrs": { "value": "10000" } },
+    { "type": "wokwi-resistor", "id": "pdTouch", "top": 340, "left": 140, "attrs": { "value": "10000" } },
+    { "type": "wokwi-resistor", "id": "pdPiezo", "top": 340, "left": 260, "attrs": { "value": "10000" } },
+    { "type": "wokwi-potentiometer", "id": "knob", "top": 260, "left": 380, "attrs": { "label": "Knob (A0)" } }
+  ],
+  "connections": [
+    [ "servo:PWM", "uno:9", "orange", [] ],
+    [ "servo:V+", "uno:5V", "red", [] ],
+    [ "servo:GND", "uno:GND.1", "black", [] ],
+
+    [ "uno:4", "rGreen:1", "green", [] ],
+    [ "rGreen:2", "ledGreen:A", "green", [] ],
+    [ "ledGreen:C", "uno:GND.1", "black", [] ],
+    [ "uno:5", "rRed:1", "red", [] ],
+    [ "rRed:2", "ledRed:A", "red", [] ],
+    [ "ledRed:C", "uno:GND.1", "black", [] ],
+
+    [ "btnStop:1.l", "uno:5V", "red", [] ],
+    [ "btnStop:2.l", "uno:3", "blue", [] ],
+    [ "btnStop:2.r", "pdStop:1", "black", [] ],
+    [ "pdStop:2", "uno:GND.2", "black", [] ],
+
+    [ "btnTouch:1.l", "uno:5V", "red", [] ],
+    [ "btnTouch:2.l", "uno:2", "blue", [] ],
+    [ "btnTouch:2.r", "pdTouch:1", "black", [] ],
+    [ "pdTouch:2", "uno:GND.2", "black", [] ],
+
+    [ "btnPiezo:1.l", "uno:5V", "red", [] ],
+    [ "btnPiezo:2.l", "uno:6", "blue", [] ],
+    [ "btnPiezo:2.r", "pdPiezo:1", "black", [] ],
+    [ "pdPiezo:2", "uno:GND.2", "black", [] ],
+
+    [ "knob:VCC", "uno:5V", "red", [] ],
+    [ "knob:SIG", "uno:A0", "green", [] ],
+    [ "knob:GND", "uno:GND.2", "black", [] ]
+  ],
+  "dependencies": {}
+}
