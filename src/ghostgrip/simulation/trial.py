@@ -17,7 +17,7 @@ from contracts import (CONDITION_AI, CONDITION_BASELINE, CONDITION_BOTH, CONDITI
                        DAMAGE, RELEASE, TrialOutcome)
 from contracts import HandStateV2 as HandState
 from contracts import SimEventV2 as SimEvent
-from ghostgrip.simulation.world import OPEN_Q, World
+from ghostgrip.simulation.world import REARM_Q, World
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,7 @@ class TrialRunner:
     def update(self, world: World, events: List[SimEvent], hand: HandState) -> Optional[TrialOutcome]:
         now = int(hand.t_ms)
         if self.state == READY:
-            if hand.tracking_ok and world.q < OPEN_Q:
+            if hand.tracking_ok and world.q < REARM_Q:
                 self.state = RUNNING
                 self.trial_id += 1
                 self.start_ms = now

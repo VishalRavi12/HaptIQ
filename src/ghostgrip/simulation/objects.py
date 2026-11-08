@@ -12,7 +12,10 @@ document 5.4 (normal force ~ m*g / (2*mu)), used only to ORDER the objects:
     hold_threshold = HOLD_K * virtual_mass / (2 * friction)
 
 Resulting grip bands (q = closure, 0 open .. 1 closed):
-    glass : contact 0.30, holds at q >= 0.40, breaks at q > 0.60  (narrow band)
+    glass : contact 0.30, holds at q >= 0.40, breaks at q > 0.82 held for 0.2 s (raised from
+            0.60 in Phase 2: real camera grips broke it too easily). Kept below the block's
+            0.85 so one grip still gives three different outcomes (glass breaks, sponge
+            squashes, block slips).
     sponge: contact 0.20, holds at q >= ~0.39, never breaks, squashes visibly
     block : contact 0.35, holds only at q >= 0.85, slips below that
 """
@@ -50,7 +53,7 @@ class ObjectProfile:
 PROFILES: Dict[str, ObjectProfile] = {
     "glass": ObjectProfile(
         kind="glass", radius=30, contact_threshold=0.30, stiffness=2.0,
-        virtual_mass=1.0, friction=0.5, break_threshold=0.60,
+        virtual_mass=1.0, friction=0.5, break_threshold=1.04,     # effort 1.04 = q 0.82
         compressibility=0.0, drop_break_speed=650.0, color=(120, 200, 245)),
     "sponge": ObjectProfile(
         kind="sponge", radius=38, contact_threshold=0.20, stiffness=0.8,
