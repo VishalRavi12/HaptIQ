@@ -1,4 +1,4 @@
-"""Member A adapter to the team's proposed contracts v2 (PR #1).
+"""Member A adapter to the team's merged shared contracts v2.
 
 Input landmarks are already mirrored normalized (x, y) pairs, as produced by
 running detection on the flipped camera frame. No second mirror is applied.
