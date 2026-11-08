@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      # The tests only need pytest, pygame and pyyaml. Camera libraries (OpenCV,
+      # The tests only need pytest, pygame, pyyaml and matplotlib (for the plot test). Camera libraries (OpenCV,
       # MediaPipe) are not needed, which keeps this job fast.
       - name: Install test dependencies
         run: |
